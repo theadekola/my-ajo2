@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Historical test-only authentication fixtures"
+paths = [
+  '''^server/test/authCookie\.test\.js$''',
+  '''^server/test/security\.test\.js$'''
+]

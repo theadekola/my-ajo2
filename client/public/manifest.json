@@ -1,0 +1,93 @@
+{
+    "id":  "/",
+    "name":  "My Ajo - Smart Savings Groups",
+    "short_name":  "My Ajo",
+    "description":  "Save together, grow together. Digital Ajo for community savings.",
+    "start_url":  "/?source=pwa",
+    "scope":  "/",
+    "display":  "standalone",
+    "display_override":  [
+                             "standalone",
+                             "fullscreen",
+                             "minimal-ui"
+                         ],
+    "orientation":  "portrait-primary",
+    "lang":  "en",
+    "dir":  "ltr",
+    "theme_color":  "#0D4A2E",
+    "background_color":  "#F7F5F0",
+    "prefer_related_applications":  false,
+    "categories":  [
+                       "finance",
+                       "productivity"
+                   ],
+    "screenshots":  [
+                        {
+                            "form_factor":  "narrow",
+                            "type":  "image/png",
+                            "sizes":  "512x512",
+                            "src":  "/icon-512.png"
+                        }
+                    ],
+    "icons":  [
+                  {
+                      "src":  "/icon-192.png",
+                      "sizes":  "192x192",
+                      "type":  "image/png",
+                      "purpose":  "any"
+                  },
+                  {
+                      "src":  "/icon-512.png",
+                      "sizes":  "512x512",
+                      "type":  "image/png",
+                      "purpose":  "any"
+                  },
+                  {
+                      "src":  "/icon-512.png",
+                      "sizes":  "512x512",
+                      "type":  "image/png",
+                      "purpose":  "maskable"
+                  }
+              ],
+    "shortcuts":  [
+                      {
+                          "name":  "Dashboard",
+                          "short_name":  "Dashboard",
+                          "description":  "View your savings dashboard",
+                          "url":  "/dashboard",
+                          "icons":  [
+                                        {
+                                            "src":  "/logo.png",
+                                            "sizes":  "192x192",
+                                            "type":  "image/png"
+                                        }
+                                    ]
+                      },
+                      {
+                          "name":  "My Groups",
+                          "short_name":  "Groups",
+                          "description":  "Manage your savings groups",
+                          "url":  "/groups",
+                          "icons":  [
+                                        {
+                                            "src":  "/logo.png",
+                                            "sizes":  "192x192",
+                                            "type":  "image/png"
+                                        }
+                                    ]
+                      },
+                      {
+                          "name":  "Calculator",
+                          "short_name":  "Calculator",
+                          "description":  "Plan your Ajo contributions",
+                          "url":  "/calculator",
+                          "icons":  [
+                                        {
+                                            "src":  "/logo.png",
+                                            "sizes":  "192x192",
+                                            "type":  "image/png"
+                                        }
+                                    ]
+                      }
+                  ]
+}

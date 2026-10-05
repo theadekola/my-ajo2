@@ -1,0 +1,30 @@
+{
+  "name": "my-ajo-server",
+  "version": "2.0.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test",
+    "migrate": "node scripts/run-migrations.js",
+    "migrate:check": "node scripts/run-migrations.js --check",
+    "secrets:generate": "node scripts/generate-secrets.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "mssql": "^11.0.1",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "10.0.14",
+    "qrcode": "^1.5.4",
+    "redis": "^5.8.2",
+    "web-push": "^3.6.7"
+  }
+}

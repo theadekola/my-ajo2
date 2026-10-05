@@ -1,0 +1,8 @@
+IF OBJECT_ID('dbo.AdminPermissions') IS NULL CREATE TABLE dbo.AdminPermissions(AdminUserId INT NOT NULL,PermissionName NVARCHAR(60) NOT NULL,GrantedBy INT NOT NULL,GrantedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),CONSTRAINT PK_AdminPermissions PRIMARY KEY(AdminUserId,PermissionName));
+GO
+IF OBJECT_ID('dbo.TransactionInvestigations') IS NULL CREATE TABLE dbo.TransactionInvestigations(InvestigationId BIGINT IDENTITY PRIMARY KEY,ContributionId INT NOT NULL,Status NVARCHAR(20) NOT NULL DEFAULT 'Open',AssignedAdminId INT NULL,InternalNote NVARCHAR(MAX) NULL,CreatedBy INT NOT NULL,CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),ResolvedAt DATETIME2 NULL,CONSTRAINT CK_TransactionInvestigation_Status CHECK(Status IN('Open','Investigating','Resolved','FalsePositive')));
+GO
+IF OBJECT_ID('dbo.SupportTickets') IS NULL CREATE TABLE dbo.SupportTickets(TicketId BIGINT IDENTITY PRIMARY KEY,UserId INT NULL,Subject NVARCHAR(200) NOT NULL,Description NVARCHAR(MAX) NULL,Category NVARCHAR(40) NOT NULL DEFAULT 'Other',Priority NVARCHAR(20) NOT NULL DEFAULT 'Normal',Status NVARCHAR(20) NOT NULL DEFAULT 'New',AssignedAdminId INT NULL,InternalNote NVARCHAR(MAX) NULL,Resolution NVARCHAR(MAX) NULL,CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),CONSTRAINT CK_SupportTicket_Status CHECK(Status IN('New','Open','InProgress','WaitingForUser','Escalated','Resolved','Closed')));
+GO
+IF COL_LENGTH('dbo.AdminAuditLog','RequestId') IS NULL ALTER TABLE dbo.AdminAuditLog ADD RequestId UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_AdminAuditLog_RequestId DEFAULT NEWID();
+GO

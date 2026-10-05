@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Google tag (gtag.js) -->
+  <script async data-cfasync="false" src="https://www.googletagmanager.com/gtag/js?id=G-6DZJJG75H3"></script>
+  <script defer data-cfasync="false" src="/analytics.js"></script>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content"/>
+  <meta name="theme-color" content="#0E1A12"/>
+  <meta name="format-detection" content="telephone=no,email=no,address=no"/>
+  <meta name="color-scheme" content="light"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="description" content="My Ajo - Save together, grow together. Digital Ajo for community savings."/>
+  <link rel="manifest" href="/manifest.json"/>
+  <link rel="icon" href="/logo.png" type="image/png"/>
+  <link rel="shortcut icon" href="/logo.png" type="image/png"/>
+  <link rel="icon" sizes="192x192" href="/icon-192.png" type="image/png"/>
+  <link rel="icon" sizes="512x512" href="/icon-512.png" type="image/png"/>
+  <link rel="apple-touch-icon" href="/icon-192.png"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-title" content="My Ajo"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <title>My Ajo</title>
+</head>
+<body style="background:#F7F5F0">
+  <div id="root">
+    <div class="startup-placeholder" role="status" aria-label="Starting My Ajo">
+      <img src="/logo.png" alt="" />
+      <strong>My <span>Ajo</span></strong>
+      <small>SMART SAVINGS GROUPS</small>
+    </div>
+  </div>
+  <script type="text/javascript">
+    window.onerror = function(msg, url, line, col, error) {
+      var div = document.createElement('div');
+      div.style.position = 'fixed'; div.style.inset = '0'; div.style.background = '#fff'; div.style.color = '#000';
+      div.style.padding = '20px'; div.style.zIndex = '99999'; div.style.overflow = 'auto'; div.style.fontFamily = 'monospace';
+      div.innerHTML = '<h2>Application Error</h2><p>' + msg + '</p><pre>' + (error ? error.stack : 'No stack trace') + '</pre>';
+      document.body.appendChild(div);
+    };
+  </script>
+  <script type="module" data-cfasync="false" src="/src/main.jsx"></script>
+</body>
+</html>
