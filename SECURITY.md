@@ -16,16 +16,18 @@ The current production release and actively maintained `main` branch are the pri
 
 ## Implemented application safeguards
 
-The repository documents:
+The current application code implements:
 
 - bcrypt password hashes with a minimum configured work factor of 12 and legacy hash upgrades after login.
 - HMAC-SHA-256 storage of OTP values.
-- AES-256-GCM encryption for selected sensitive fields, including payment-related identifiers and messages.
+- AES-256-GCM encryption specifically for MFA secrets using `MFA_ENCRYPTION_KEY` and its active version.
 - HS256 JWT authentication, short token lifetime, and HttpOnly/Secure cookies.
 - CSRF protection and allowlisted CORS origins for authenticated mutations.
 - Request throttling, JSON size limits, common HTTP security headers and restricted upload types.
 
-These statements describe documented code-level mechanisms. They are not a claim that the live environment has undergone an independent penetration test.
+These statements describe code-level mechanisms, not an independent penetration test or verification of production configuration. General `encryptValue()` and `decryptValue()` helpers currently return strings without encryption. Member/payment identifiers, messages and other fields passed through those helpers are not encrypted at the application layer. SQL Server TDE, TLS and backup encryption are separate infrastructure controls that must be verified operationally.
+
+Redis is optional and enabled with `REDIS_ENABLED=true`. Without available Redis, the application uses SQL Server and in-process fallbacks. In-process throttling and event delivery are not shared across API instances; assess those limits before operating multiple instances.
 
 ## Secrets and key management
 
@@ -37,17 +39,27 @@ If a secret is exposed, revoke or rotate it promptly and assess downstream impac
 
 ## Database encryption and production requirements
 
-Application-level field encryption does not replace HTTPS/TLS, SQL Server TDE, encrypted backups, least-privilege database access, firewall restrictions, logging, key rotation or tested recovery. The documented target configuration is `DB_ENCRYPT=true` and `DB_TRUST_CERT=false` with a trusted SQL Server certificate.
+MFA-secret encryption does not protect general member/payment fields and does not replace HTTPS/TLS, SQL Server TDE, encrypted backups, least-privilege database access, firewall restrictions, logging, key rotation or tested recovery. The target SQL connection configuration is `DB_ENCRYPT=true` and `DB_TRUST_CERT=false` with a trusted SQL Server certificate. SQL connection encryption protects data in transit; it does not enable TDE or encrypt database backups.
 
 Before relying on TDE, verify it is enabled for `MyAjoDB` and securely back up its certificate and private key. Keep backups encrypted and test full restoration in a non-production environment.
 
 **Deployment caution:** `deploy/Update-MyAjo.ps1` currently invokes `sqlcmd` with `-C`, which trusts the server certificate for migration connections. Review this difference from the application's strict certificate validation configuration before deployment.
 
-## Existing-database encryption migration
+## Existing-database schema migrations and MFA keys
 
-Follow the reviewed migration instructions and back up both the database and current environment before making changes. The repository documents `database/harden-sensitive-data.sql` and an encryption migration procedure. Confirm the actual script and package commands in the checked-out release before executing any migration. Never rotate or discard a field-encryption key until all relevant ciphertext is confirmed readable with the replacement key.
+Back up the database and current environment before applying reviewed schema changes. Run `npm run migrate:check` from `server/` to validate versioned SQL migration files and `npm run migrate` to apply pending versioned schema migrations to the configured database. `database/harden-sensitive-data.sql` is a separate schema-hardening script; it does not establish encryption of stored member/payment fields.
+
+Pending migration `014_remove_field_encryption.sql` is a destructive reset: it clears profile/bank fields and payment/chat data while retaining MFA secrets. It does not decrypt existing general-field ciphertext into usable data. Review its full SQL, verify backups and recovery, and obtain explicit approval for the reset before applying it to a live database. The deployment script runs pending versioned migrations remotely even when its local `-SkipDatabase` switch is selected.
+
+This release has no `migrate:encrypt` package command or supported general-field encryption migration. Do not use the deployment script's legacy `-RunEncryptionMigration` switch, which invokes that missing command. Preserve the existing `MFA_ENCRYPTION_KEY` and version for existing MFA ciphertext. Do not rotate or discard that key until a reviewed migration or recovery process confirms all required MFA secrets remain readable.
 
 ## Operational checks
+
+### Dependency audit status
+
+The client dependencies and iOS Swift package pin use Capacitor 8.4.3 to address [GHSA-rvm3-566m-v7fv](https://github.com/advisories/GHSA-rvm3-566m-v7fv). Rebuild and redistribute any Android/iOS app previously built with an affected version; changing repository dependencies alone does not patch installed apps.
+
+As of 10 October 2026, the server lockfile includes `proxy-addr` 2.0.8, which fixes [GHSA-jqcg-44mw-7w3h](https://github.com/advisories/GHSA-jqcg-44mw-7w3h). The server audit still reports three moderate findings through the `mssql` / `tedious` / `sprintf-js` dependency chain. [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c) currently lists no patched `sprintf-js` version. The reported forced fix downgrades `mssql` to 4.2.0 and is a breaking change; it is not applied by this update. Re-run audits for each release, assess the affected formatting paths, and track upstream remediation. Passing the high-severity CI audit threshold does not mean there are no reported vulnerabilities.
 
 Verify authentication and session revocation, CSRF/CORS behaviour, community/group authorisation, upload access, notification delivery, database encryption, backup recovery and audit trails in a controlled staging environment. Review privacy and financial regulatory requirements appropriate to the actual service provided.
 
