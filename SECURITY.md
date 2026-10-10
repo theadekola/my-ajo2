@@ -1,43 +1,56 @@
-# My Ajo security deployment
+# My Ajo Security Policy
 
-## Protected by the application
+## Reporting vulnerabilities
 
-- Passwords are one-way bcrypt hashes with a minimum work factor of 12. Older hashes are upgraded after a successful login.
-- OTP values are stored as HMAC-SHA-256 hashes, not plaintext.
-- Phone numbers, addresses, bank/payment identifiers, payment references/notes, payment instructions, and chat messages use AES-256-GCM authenticated encryption.
-- JWTs require a strong signing secret, use an explicit HS256 algorithm, and expire after one hour by default.
-- Authentication JWTs are delivered only in an HttpOnly, Secure, SameSite=None cookie so the allowlisted Capacitor origins can authenticate. They are never returned to JavaScript or stored in localStorage. CSRF tokens and a strict CORS allowlist protect cookie-authenticated mutations.
-- CORS is allowlisted, authentication is throttled, JSON requests are size-limited, and common security headers are set.
-- Upload names are random UUIDs and accepted file types are restricted.
+Please report suspected vulnerabilities **privately** using GitHub's private vulnerability reporting feature for this repository, if enabled. Do not open a public issue containing an exploit, secret or personal information. If private reporting is not enabled, contact the maintainer through https://theadekola.online and request a secure reporting channel before sharing sensitive technical details.
 
-## Required secrets
+Include the affected component, relevant version or commit, reproduction steps using synthetic data, expected versus observed behaviour, likely impact and a safe contact method. Do not include production member records, credentials or financial details.
 
-Generate three independent values. Never reuse one value for another purpose:
+## Responsible testing
 
-Run `npm run secrets:generate` inside the server directory, then copy the three generated values into the protected server environment.
+Do not test against other people's accounts or production financial records. Do not conduct denial-of-service testing, social engineering, bulk scanning, destructive testing or unauthorised data access. Stop and report privately if you encounter sensitive information. Public deployment is not permission to probe the live system.
 
-Store secrets in the server's secret manager or `/opt/my-ajo/server/.env` with owner-only permissions. Never commit `.env`. `MFA_ENCRYPTION_KEY` must be 64 hexadecimal characters and `MFA_ENCRYPTION_KEY_VERSION=1`.
+## Supported versions and response
 
-## Public repository checks
+The current production release and actively maintained `main` branch are the primary targets for security fixes. Historical releases may not receive patches. The maintainer will triage reports and coordinate remediation and disclosure where appropriate; no fixed response-time SLA is promised.
 
-- Keep runtime `.env` files, mobile Firebase configuration, signing keys, provisioning profiles, database backups, uploaded files, and release archives outside Git.
-- Store CI-only values in GitHub Actions secrets. Use `ANDROID_GOOGLE_SERVICES_JSON_B64` and `IOS_GOOGLE_SERVICE_INFO_PLIST_B64` for optional Firebase-enabled CI builds.
-- Restrict Firebase client API keys by Android package/signing certificate or iOS bundle ID, and enable only the APIs the app needs. Client configuration is extractable from installed apps even when it is not published in source control.
-- Run the Security CI workflow before changing repository visibility. It scans complete Git history with Gitleaks.
-- If a real secret was ever committed, revoke or rotate it first. Removing or commenting it in the latest commit does not remove it from Git history.
-- Use a GitHub `noreply` commit email if personal email privacy is required.
+## Implemented application safeguards
 
-## Existing database migration
+The repository documents:
 
-1. Back up the SQL database and the current server `.env`.
-2. Deploy the new code but do not restart PM2 yet.
-3. Add the required secrets and set `DB_ENCRYPT=true`, `DB_TRUST_CERT=false` after installing a trusted SQL Server certificate.
-4. Run `database/harden-sensitive-data.sql` against MyAjoDB.
-5. Run `npm run migrate:encrypt` once. It encrypts plaintext values transactionally and rotates legacy ciphertext in memory when `LEGACY_DATA_ENCRYPTION_KEY` is temporarily available. It never writes decrypted values to the database.
-6. Restart with `pm2 restart all --update-env` and verify `/api/health`.
+- bcrypt password hashes with a minimum configured work factor of 12 and legacy hash upgrades after login.
+- HMAC-SHA-256 storage of OTP values.
+- AES-256-GCM encryption for selected sensitive fields, including payment-related identifiers and messages.
+- HS256 JWT authentication, short token lifetime, and HttpOnly/Secure cookies.
+- CSRF protection and allowlisted CORS origins for authenticated mutations.
+- Request throttling, JSON size limits, common HTTP security headers and restricted upload types.
 
-The migration is idempotent: current `enc:v1:` values are not encrypted twice. Remove `LEGACY_DATA_ENCRYPTION_KEY` after any legacy rotation succeeds; retain the current field key in the secret manager so the application can decrypt active data.
+These statements describe documented code-level mechanisms. They are not a claim that the live environment has undergone an independent penetration test.
 
-## Infrastructure controls still required
+## Secrets and key management
 
-Application encryption is not a substitute for TLS, SQL Server Transparent Data Encryption, encrypted backups, restricted database permissions, firewall rules, audit logs, key rotation, and tested backups. Keep `DB_ENCRYPT=true` and `DB_TRUST_CERT=false` with a trusted SQL Server certificate. Enable TDE on `MyAjoDB` and securely back up its certificate and private key before deployment. Email remains searchable for login and dates remain SQL-native; protect those using SQL Server TDE and encrypted backups.
+Generate independent secrets with `npm run secrets:generate` from `server/`. Protect `JWT_SECRET`, `OTP_PEPPER`, `MFA_ENCRYPTION_KEY`, database credentials and provider keys. `MFA_ENCRYPTION_KEY` must be a 64-character hexadecimal value; preserve the correct active key and version when upgrading.
+
+Use a protected secret manager or `/opt/my-ajo/server/.env` with owner-only permissions. Never commit `.env`, Firebase service configuration, keystores, provisioning profiles, uploaded files, database backups or release archives. Keep CI-only values in GitHub Actions secrets. Client Firebase configuration can be extracted from installed applications, so restrict applicable keys and APIs.
+
+If a secret is exposed, revoke or rotate it promptly and assess downstream impact. Removing it from Git history does not invalidate it. Scan current code and reachable history with appropriate secret-scanning tools.
+
+## Database encryption and production requirements
+
+Application-level field encryption does not replace HTTPS/TLS, SQL Server TDE, encrypted backups, least-privilege database access, firewall restrictions, logging, key rotation or tested recovery. The documented target configuration is `DB_ENCRYPT=true` and `DB_TRUST_CERT=false` with a trusted SQL Server certificate.
+
+Before relying on TDE, verify it is enabled for `MyAjoDB` and securely back up its certificate and private key. Keep backups encrypted and test full restoration in a non-production environment.
+
+**Deployment caution:** `deploy/Update-MyAjo.ps1` currently invokes `sqlcmd` with `-C`, which trusts the server certificate for migration connections. Review this difference from the application's strict certificate validation configuration before deployment.
+
+## Existing-database encryption migration
+
+Follow the reviewed migration instructions and back up both the database and current environment before making changes. The repository documents `database/harden-sensitive-data.sql` and an encryption migration procedure. Confirm the actual script and package commands in the checked-out release before executing any migration. Never rotate or discard a field-encryption key until all relevant ciphertext is confirmed readable with the replacement key.
+
+## Operational checks
+
+Verify authentication and session revocation, CSRF/CORS behaviour, community/group authorisation, upload access, notification delivery, database encryption, backup recovery and audit trails in a controlled staging environment. Review privacy and financial regulatory requirements appropriate to the actual service provided.
+
+## Disclosure
+
+Coordinate public disclosure after a fix or agreed mitigation is available. Do not publish proof-of-concept material that would expose live accounts or data.
