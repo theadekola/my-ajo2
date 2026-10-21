@@ -41,7 +41,7 @@ let authUserLoader = async claims => {
   `);
   const current = await pool.request().input('uid', sql.Int, claims.userId)
     .query(`SELECT UserId,Email,FirstName,LastName,SystemRole,IsProtectedAccount,OrganizerStatus,CanCreateGroups,
-                   MfaEnabled,TokenVersion,IsActive,IsEmailVerified,OnboardingDone,LockedUntil
+                   MfaEnabled,MustResetPassword,TokenVersion,IsActive,IsEmailVerified,OnboardingDone,LockedUntil
             FROM dbo.Users WHERE UserId=@uid`);
   return current.recordset[0];
 };
@@ -119,6 +119,7 @@ export async function requirePendingAuth(req, res, next) {
     if (!user || !user.IsActive || Number(user.TokenVersion) !== Number(claims.tokenVersion)) {
       return res.status(401).json({ error: 'Session has been revoked', code: 'SESSION_REVOKED' });
     }
+    if (user.MustResetPassword) return res.status(403).json({error:'Reset your password using Forgot password before signing in.',code:'PASSWORD_RESET_REQUIRED'});
     if (user.LockedUntil && new Date(user.LockedUntil) > new Date()) {
       return res.status(423).json({ error: 'Account temporarily locked', code: 'ACCOUNT_LOCKED' });
     }
@@ -316,7 +317,7 @@ export const chatUpload=multer({
   limits:{fileSize:15*1024*1024,files:1},
   fileFilter:(_,file,cb)=>{
     const allowed=new Set(['image/jpeg','image/png','image/webp','application/pdf','audio/webm','audio/mp4','audio/mpeg','audio/ogg','audio/wav','audio/x-wav','audio/aac','audio/3gpp','video/mp4']);
-    allowed.has(String(file.mimetype||'').toLowerCase())?cb(null,true):cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE',file.fieldname));
+    allowed.has(String(file.mimetype||'').split(';')[0].toLowerCase())?cb(null,true):cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE',file.fieldname));
   }
 });
 export const upload=financialUpload;

@@ -21,8 +21,8 @@ export default function SupportEmail() {
     setStatus('');
     setError('');
     try {
-      await apiPost('/support/email', { subject, message });
-      setStatus('Message sent. Support will reply to your account email.');
+      const result=await apiPost('/support/email', { subject, message });
+      setStatus(`Support request #${result.ticketId} saved.${result.emailSent?' Email delivered to support.':' Support can review it in the application.'} Replies will use your account email.`);
       setMessage('');
     } catch (ex) {
       setError(ex.message || 'Could not send message.');

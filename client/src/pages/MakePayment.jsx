@@ -100,6 +100,7 @@ export default function MakePayment() {
       showToast('Payment submitted! Admin will confirm shortly.');
     } catch (ex) {
       setErr(ex.message);
+    } finally {
       setBusy(false);
     }
   };
@@ -112,7 +113,7 @@ export default function MakePayment() {
         <div style={{ fontFamily: "'Inter','Poppins',sans-serif", fontSize: 22, fontWeight: 700, color: 'var(--deep)', marginBottom: 8 }}>Payment Submitted!</div>
         <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 24 }}>Your admin will review and confirm your payment shortly.</p>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button className="btn btn-gh" onClick={() => setDone(false)}>Pay Again</button>
+          <button className="btn btn-gh" onClick={() => {setDone(false);setFile(null);setForm(current=>({...current,referenceNo:'',note:''}));}}>Pay Again</button>
         </div>
       </div>
     </div>

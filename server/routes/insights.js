@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware.js';
 import { cacheGet, cacheSet } from '../services/redisService.js';
 import { APP_KNOWLEDGE } from '../knowledge/appKnowledge.js';
 
+const responseText=data=>data.output_text||data.output?.flatMap(item=>item.content||[]).filter(item=>item.type==='output_text').map(item=>item.text).join('\n')||'';
 const r=Router(); r.use(requireAuth);
 const formatCurrencyAmount=(value,currency='NGN')=>{
   const currencyCode=String(currency||'NGN').trim().toUpperCase();
@@ -36,25 +37,25 @@ r.get('/search',async(req,res)=>{
   const pool=await getPool(); const request=pool.request().input('uid',sql.Int,req.user.userId).input('q',sql.NVarChar(90),`%${q}%`);
   const result=await request.query(`
     SELECT TOP 8 'group' AS Type,CAST(g.GroupId AS NVARCHAR(30)) AS Id,g.GroupName AS Title,g.Status AS Subtitle,'/group/'+CAST(g.GroupId AS NVARCHAR(30)) AS Link
-    FROM AjoGroups g WHERE g.GroupName LIKE @q AND (${req.user.systemRole==='Admin'?'1=1':"g.GroupId IN(SELECT GroupId FROM GroupMembers WHERE UserId=@uid AND Status='Approved')"})
+    FROM AjoGroups g WHERE g.GroupName LIKE @q AND (g.GroupId IN(SELECT GroupId FROM GroupMembers WHERE UserId=@uid AND Status='Approved'))
     UNION ALL
-    SELECT TOP 8 'contribution',CAST(c.ContributionId AS NVARCHAR(30)),u.FirstName+' '+u.LastName+' contribution',g.GroupName+' · '+CAST(c.Amount AS NVARCHAR(40)),'/contributions'
+    SELECT TOP 8 'contribution',CAST(c.ContributionId AS NVARCHAR(30)),CASE WHEN g.GroupMembersAnonymous=1 AND c.UserId<>@uid AND NOT EXISTS(SELECT 1 FROM GroupMembers v WHERE v.GroupId=g.GroupId AND v.UserId=@uid AND v.Role='Admin' AND v.Status='Approved') THEN 'Anonymous Member contribution' ELSE u.FirstName+' '+u.LastName+' contribution' END,g.GroupName+' · '+CAST(c.Amount AS NVARCHAR(40)),'/contributions'
     FROM Contributions c JOIN Users u ON u.UserId=c.UserId JOIN AjoGroups g ON g.GroupId=c.GroupId
-    WHERE (u.FirstName+' '+u.LastName LIKE @q OR g.GroupName LIKE @q OR CAST(c.Amount AS NVARCHAR(40)) LIKE @q)
-      AND (${req.user.systemRole==='Admin'?'1=1':"c.GroupId IN(SELECT GroupId FROM GroupMembers WHERE UserId=@uid AND Status='Approved')"})
-    ${req.user.systemRole==='Admin'?"UNION ALL SELECT TOP 8 'user',CAST(UserId AS NVARCHAR(30)),FirstName+' '+LastName,Email,'/more' FROM Users WHERE FirstName+' '+LastName LIKE @q OR Email LIKE @q":''}`);
+    WHERE ((u.FirstName+' '+u.LastName LIKE @q AND (g.GroupMembersAnonymous=0 OR c.UserId=@uid OR EXISTS(SELECT 1 FROM GroupMembers v WHERE v.GroupId=g.GroupId AND v.UserId=@uid AND v.Role='Admin' AND v.Status='Approved'))) OR g.GroupName LIKE @q OR CAST(c.Amount AS NVARCHAR(40)) LIKE @q)
+      AND (c.GroupId IN(SELECT GroupId FROM GroupMembers WHERE UserId=@uid AND Status='Approved'))
+`);
   const payload={query:q,items:result.recordset}; await cacheSet(key,payload,20); res.json(payload);
 });
 
 r.get('/summary',async(req,res)=>{
   const key=`summary:${req.user.userId}`; const cached=await cacheGet(key); if(cached) return res.json(cached);
-  const pool=await getPool(); const result=await pool.request().input('uid',sql.Int,req.user.userId).query(`SELECT TOP 50 EventType,Category,Title,Description,Amount,Currency,CreatedAt FROM ActivityEvents e WHERE e.CreatedAt>=DATEADD(day,-1,SYSUTCDATETIME()) AND (${req.user.systemRole==='Admin'?'1=1':"e.IsAdminOnly=0 AND (e.UserId=@uid OR e.IsPublic=1 OR e.GroupId IN(SELECT GroupId FROM GroupMembers WHERE UserId=@uid AND Status='Approved'))"}) ORDER BY CreatedAt DESC`);
+  const pool=await getPool(); const result=await pool.request().input('uid',sql.Int,req.user.userId).query(`SELECT TOP 50 EventType,Category,Title,Description,Amount,Currency,CreatedAt FROM ActivityEvents e WHERE e.CreatedAt>=DATEADD(day,-1,SYSUTCDATETIME()) AND (e.IsAdminOnly=0 AND (e.UserId=@uid OR e.IsPublic=1 OR e.GroupId IN(SELECT GroupId FROM GroupMembers WHERE UserId=@uid AND Status='Approved'))) ORDER BY CreatedAt DESC`);
   const events=result.recordset; const total=events.reduce((s,e)=>s+Number(e.Amount||0),0);
   const currency=events.find(event=>event.Amount!=null&&event.Currency)?.Currency||'NGN';
   let text=events.length?`${events.length} activities were recorded in the last 24 hours${total?`, involving ${formatCurrencyAmount(total,currency)} in recorded amounts`:''}.`:'No significant activity was recorded in the last 24 hours.';
   let source='calculated';
   if(process.env.OPENAI_API_KEY && events.length){
-    try{const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_SUMMARY_MODEL||'gpt-5-mini',instructions:'Summarize this savings-app activity in 3 concise bullets. Do not invent facts or expose identifiers.',input:JSON.stringify(events.slice(0,30)),max_output_tokens:220})}); if(response.ok){const data=await response.json(); if(data.output_text){text=data.output_text;source='openai';}}}catch(error){console.warn('AI summary fallback used',error?.message||error);}
+    try{const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',signal:AbortSignal.timeout(15000),headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_SUMMARY_MODEL||'gpt-5-mini',instructions:'Summarize this savings-app activity in 3 concise bullets. Do not invent facts or expose identifiers.',input:JSON.stringify(events.slice(0,30)),max_output_tokens:220})}); if(response.ok){const data=await response.json(); if(responseText(data)){text=responseText(data);source='openai';}}}catch(error){console.warn('AI summary fallback used',error?.message||error);}
   }
   const payload={text,source,generatedAt:new Date().toISOString()}; await cacheSet(key,payload,60); res.json(payload);
 });
@@ -63,17 +64,15 @@ r.post('/ask',async(req,res)=>{
   const history=Array.isArray(req.body?.history)?req.body.history.slice(-8).map(item=>({role:item?.role==='ai'?'assistant':'user',text:String(item?.text||'').slice(0,1000)})).filter(item=>item.text):[];
   if(!question) return res.status(400).json({error:'Enter a question'});
   const pool=await getPool();
-  const scope=req.user.systemRole==='Admin'?'1=1':"g.GroupId IN(SELECT GroupId FROM GroupMembers WHERE UserId=@uid AND Status='Approved')";
-  const visibleMemberName=req.user.systemRole==='Admin'
-    ? "u.FirstName+' '+u.LastName"
-    : `CASE WHEN g.GroupMembersAnonymous=1 AND gm.UserId<>@uid AND gm.Role<>'Admin'
+  const scope="g.GroupId IN(SELECT GroupId FROM GroupMembers WHERE UserId=@uid AND Status='Approved')";
+  const visibleMemberName= `CASE WHEN g.GroupMembersAnonymous=1 AND gm.UserId<>@uid AND gm.Role<>'Admin'
              AND NOT EXISTS(SELECT 1 FROM GroupMembers viewer WHERE viewer.GroupId=g.GroupId AND viewer.UserId=@uid AND viewer.Status='Approved' AND viewer.Role='Admin')
             THEN 'Anonymous Member' ELSE u.FirstName+' '+u.LastName END`;
   const facts=await pool.request().input('uid',sql.Int,req.user.userId).query(`
     SELECT TOP 50 g.GroupName,${visibleMemberName} MemberName,g.ContributionAmount Expected,c.Amount,c.Status,c.PaidAt
     FROM GroupMembers gm JOIN AjoGroups g ON g.GroupId=gm.GroupId JOIN Users u ON u.UserId=gm.UserId
     LEFT JOIN Contributions c ON c.GroupId=g.GroupId AND c.UserId=u.UserId AND c.CycleNumber=g.CurrentCycle WHERE ${scope};
-    SELECT TOP 30 g.GroupName,u.FirstName+' '+u.LastName Recipient,p.Amount,p.Status,p.ScheduledFor
+    SELECT TOP 30 g.GroupName,CASE WHEN g.GroupMembersAnonymous=1 AND p.RecipientId<>@uid AND NOT EXISTS(SELECT 1 FROM GroupMembers v WHERE v.GroupId=g.GroupId AND v.UserId=@uid AND v.Role='Admin' AND v.Status='Approved') THEN 'Anonymous Member' ELSE u.FirstName+' '+u.LastName END Recipient,p.Amount,p.Status,p.ScheduledFor
     FROM Payouts p JOIN AjoGroups g ON g.GroupId=p.GroupId JOIN Users u ON u.UserId=p.RecipientId WHERE ${scope} ORDER BY p.ScheduledFor;
     SELECT g.GroupName,COUNT(CASE WHEN c.Status='Confirmed' THEN 1 END) Confirmed,COUNT(c.ContributionId) Total,
       ISNULL(SUM(CASE WHEN c.Status='Confirmed' THEN c.Amount ELSE 0 END),0) Collected
@@ -87,9 +86,9 @@ r.post('/ask',async(req,res)=>{
   const context={contributions:facts.recordsets[0],payouts:facts.recordsets[1],groups:facts.recordsets[2],user:facts.recordsets[3]?.[0]||{},recentActivity:facts.recordsets[4]||[]};
   if(!process.env.OPENAI_API_KEY) return res.json({answer:guideFallback(question),source:'guide-fallback'});
   try{
-    const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_SUMMARY_MODEL||'gpt-5-mini',instructions:`You are My Ajo AI, the in-app product and account assistant. Follow this authoritative app knowledge:\n${APP_KNOWLEDGE}`,input:`Recent conversation: ${JSON.stringify(history)}\nCurrent question: ${question}\nAUTHORIZED USER DATA: ${JSON.stringify(context)}`,max_output_tokens:900})});
+    const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',signal:AbortSignal.timeout(15000),headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_SUMMARY_MODEL||'gpt-5-mini',instructions:`You are My Ajo AI, the in-app product and account assistant. Follow this authoritative app knowledge:\n${APP_KNOWLEDGE}`,input:`Recent conversation: ${JSON.stringify(history)}\nCurrent question: ${question}\nAUTHORIZED USER DATA: ${JSON.stringify(context)}`,max_output_tokens:900})});
     const data=await response.json(); if(!response.ok) throw new Error(data?.error?.message||'AI request failed');
-    res.json({answer:data.output_text||'No answer was generated.',source:'openai'});
+    res.json({answer:responseText(data)||'No answer was generated.',source:'openai'});
   }catch(error){console.error('Ask AI failed',error?.message||error);res.json({answer:guideFallback(question),source:'guide-fallback'});}
 });
 export default r;

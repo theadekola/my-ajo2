@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import SvgIcon from '../components/SvgIcon.jsx';
 import { Link } from 'react-router-dom';
-import { State } from 'country-state-city';
+import * as State from '../data/subdivisions.js';
 import { apiAssetUrl, apiGet, apiPut, apiUpload } from '../api/appClient.js';
 import { useAuth, COUNTRIES } from '../context/AuthContext.jsx';
 import { NIGERIA_LGAS } from './Auth.jsx';
@@ -163,21 +163,15 @@ export default function Profile() {
       setLocalities([...(NIGERIA_LGAS[selectedSubdivision.name] || [])].sort((a, b) => a.localeCompare(b)));
       return () => { active = false; };
     }
-    import('country-state-city').then(({ City }) => {
-      if (!active) return;
-      const places = City.getCitiesOfState(cc.code, selectedSubdivision.isoCode)
-        .map(item => item.name)
-        .filter((name, index, names) => index === 0 || name !== names[index - 1])
-        .sort((a, b) => a.localeCompare(b));
-      setLocalities(places);
-    }).catch(() => active && setLocalities([]));
+    setLocalities([]); // A free-text local area is available where no curated list is supplied.
     return () => { active = false; };
   }, [cc.code, selectedSubdivision?.name, selectedSubdivision?.isoCode]);
 
   const pickFile = async e => {
     const file = e.target.files[0];
     if (!file) return;
-    setPreview(URL.createObjectURL(file));
+    const nextPreview=URL.createObjectURL(file);
+    setPreview(nextPreview);
     setBusy(true);
     try {
       const fd = new FormData();
@@ -186,11 +180,14 @@ export default function Profile() {
       setUser(u => ({ ...u, ProfilePicture: url }));
       showToast('Photo updated!');
     } catch (ex) {
+      setPreview(null);
       showToast(ex.message, 'error');
     } finally {
       setBusy(false);
+      if(fileRef.current)fileRef.current.value='';
     }
   };
+  useEffect(()=>()=>{if(preview)URL.revokeObjectURL(preview);},[preview]);
 
   const save = async () => {
     if (usesPostcode && !String(form.postcode || '').trim()) {

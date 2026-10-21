@@ -51,7 +51,7 @@ function prefColumn(type) {
   return null;
 }
 
-export async function sendPushToUser(pool, sql, userId, payload) {
+export async function sendPushToUser(pool, sql, userId, payload, { throwOnFailure=false }={}) {
   if (!userId) return;
 
   await ensurePushTable(pool);
@@ -67,6 +67,7 @@ export async function sendPushToUser(pool, sql, userId, payload) {
       WHERE ps.UserId=@uid AND ps.Enabled=1 AND ISNULL(ps.SubscriptionType,'web')='web' ${prefCheck}
     `);
 
+  if(throwOnFailure&&result.recordset.length&&!pushConfigured)throw new Error('Web push delivery is waiting for server credentials');
   if (pushConfigured) await Promise.all(result.recordset.map(async row => {
     try {
       await webpush.sendNotification({
@@ -87,20 +88,24 @@ export async function sendPushToUser(pool, sql, userId, payload) {
           .query('UPDATE PushSubscriptions SET Enabled=0,UpdatedAt=SYSUTCDATETIME() WHERE PushSubscriptionId=@id');
       } else {
         console.error('Push send failed', error.message);
+        if(throwOnFailure)throw error;
       }
     }
   }));
 
-  await sendNativePushToUser(pool, sql, userId, payload, prefCheck);
+  await sendNativePushToUser(pool, sql, userId, payload, prefCheck, throwOnFailure);
 }
 
-async function sendNativePushToUser(pool, sql, userId, payload, prefCheck) {
+async function sendNativePushToUser(pool, sql, userId, payload, prefCheck, throwOnFailure) {
   const projectId = String(process.env.FCM_PROJECT_ID || '').trim();
   const clientEmail = String(process.env.FCM_CLIENT_EMAIL || '').trim();
   const privateKey = String(process.env.FCM_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
   const fcmConfigured = Boolean(projectId && clientEmail && privateKey);
   const apnsConfigured = Boolean(process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_PRIVATE_KEY);
-  if (!fcmConfigured && !apnsConfigured) return;
+  if (!fcmConfigured && !apnsConfigured) {
+    if(throwOnFailure){const pending=await pool.request().input('uid',sql.Int,userId).query("SELECT TOP 1 PushSubscriptionId FROM PushSubscriptions WHERE UserId=@uid AND Enabled=1 AND SubscriptionType='native'");if(pending.recordset.length)throw new Error('Native push delivery is waiting for server credentials');}
+    return;
+  }
 
   const result = await pool.request()
     .input('uid', sql.Int, userId)
@@ -126,6 +131,7 @@ async function sendNativePushToUser(pool, sql, userId, payload, prefCheck) {
       const accessToken = await getFirebaseAccessToken({ clientEmail, privateKey });
       const response = await fetch(`https://fcm.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/messages:send`, {
         method: 'POST',
+        signal: AbortSignal.timeout(15000),
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
@@ -152,6 +158,7 @@ async function sendNativePushToUser(pool, sql, userId, payload, prefCheck) {
       }
     } catch (error) {
       console.error('Native push send failed', error.message);
+      if(throwOnFailure)throw error;
     }
   }));
 }
@@ -179,6 +186,8 @@ async function sendApnsNotification(deviceToken, payload) {
   const bundleId = String(process.env.APNS_BUNDLE_ID || 'com.myajo.app').trim();
   const client = http2.connect(origin);
   await new Promise((resolve, reject) => {
+    client.setTimeout(15000,()=>client.destroy(new Error('APNs timeout')));
+    client.on('error',reject);
     const request = client.request({
       ':method': 'POST',
       ':path': `/3/device/${encodeURIComponent(deviceToken)}`,
@@ -222,6 +231,7 @@ async function getFirebaseAccessToken({ clientEmail, privateKey }) {
   const signature = crypto.sign('RSA-SHA256', Buffer.from(unsigned), privateKey).toString('base64url');
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
+        signal: AbortSignal.timeout(15000),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',

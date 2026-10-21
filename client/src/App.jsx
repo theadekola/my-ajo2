@@ -2,9 +2,10 @@ import { Component, lazy, Suspense, useLayoutEffect, useRef, useState } from 're
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import Layout from './components/Layout.jsx';
+import NativeNotifications from './components/NativeNotifications.jsx';
 import CookieConsent from './components/CookieConsent.jsx';
 import Landing   from './pages/Landing.jsx';
-import Auth      from './pages/Auth.jsx';
+const Auth = lazy(() => import('./pages/Auth.jsx'));
 import Dashboard  from './pages/Dashboard.jsx';
 import SuperAdminLayout from './components/SuperAdminLayout.jsx';
 import { inviteJoinPath, readPendingInvite, savePendingInvite } from './utils/pendingInvite.js';
@@ -88,7 +89,7 @@ function SuperAdminGuard({children}) {
   const {user,loading}=useAuth();
   if(loading) return <div className="sa-loading">Loading protected administration…</div>;
   if(!user) return <Navigate to="/auth" replace/>;
-  if(user.SystemRole!=='SuperAdmin') return <Navigate to="/dashboard" replace/>;
+  if(!['Admin','SuperAdmin'].includes(user.SystemRole)) return <Navigate to="/dashboard" replace/>;
   if(!user.MfaVerifiedAt) return <Navigate to="/more" replace/>;
   return children;
 }
@@ -155,6 +156,7 @@ export default function App() {
 
   return (
     <>
+      <NativeNotifications />
       <AppLoader visible={loaderVisible} />
       <CookieConsent />
       <ChunkErrorBoundary key={location.pathname}>
@@ -174,6 +176,7 @@ export default function App() {
             <Route path="/system-admin/transactions" element={<SystemAdmin />} />
             <Route path="/system-admin/security" element={<SystemAdmin />} />
             <Route path="/system-admin/audit-logs" element={<SystemAdmin />} />
+            <Route path="/system-admin/reports" element={<SystemAdmin />} />
             <Route path="/system-admin/support" element={<SystemAdmin />} />
             <Route path="/system-admin/administrators" element={<SystemAdmin />} />
             <Route path="/system-admin/settings" element={<SystemAdmin />} />

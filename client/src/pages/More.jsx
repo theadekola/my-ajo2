@@ -70,13 +70,14 @@ export default function More() {
           <div style={{ fontFamily: "'Inter','Poppins',sans-serif", fontSize: 17, fontWeight: 800, color: 'var(--deep)' }}>{user?.FirstName} {user?.LastName}</div>
           <div style={{ fontSize: 12, color: 'var(--muted)' }}>{user?.Email} - {user?.SystemRole}</div>
         </div>
-        {user?.SystemRole === 'SuperAdmin' && (
+        {['Admin','SuperAdmin'].includes(user?.SystemRole) && (
           <button type="button" className="btn btn-g sa-switch" onClick={beginSuperAdminSwitch} disabled={mfaBusy}>
-            <SvgIcon name="shield" size={16}/> {mfaBusy ? 'Preparing...' : 'Switch to S.A'}
+            <SvgIcon name="shield" size={16}/> {mfaBusy ? 'Preparing...' : 'Administration'}
           </button>
         )}
       </div>
 
+      {mfaError&&!mfaTicket&&<div className="err-msg" role="alert">{mfaError}</div>}
       <div className="card">
         {items.map(item => (
           <div key={item.to} className="row" style={{ cursor: 'pointer' }} onClick={() => navigate(item.to)}>

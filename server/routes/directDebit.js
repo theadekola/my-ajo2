@@ -34,20 +34,5 @@ r.get('/group/:groupId', async (req,res) => {
   });
   res.json(rows);
 });
-r.post('/group/:groupId', async (req,res) => {
-  try {
-    const {bankName,accountNumber,accountName}=req.body;
-    const gid=parseInt(req.params.groupId);
-    const p=await getPool();
-    const access=await p.request().input('gid',sql.Int,gid).input('uid',sql.Int,req.user.userId)
-      .query("SELECT 1 AS Allowed FROM GroupMembers WHERE GroupId=@gid AND UserId=@uid AND Status='Approved'");
-    if(!access.recordset.length) return res.status(403).json({error:'Group membership required'});
-    await p.request().input('gid',sql.Int,gid).input('uid',sql.Int,req.user.userId)
-      .query('UPDATE DirectDebitPayments SET Status=\'Cancelled\' WHERE GroupId=@gid AND UserId=@uid AND Status=\'Active\'');
-    await p.request().input('gid',sql.Int,gid).input('uid',sql.Int,req.user.userId)
-      .input('bn',sql.NVarChar,encryptValue(bankName)).input('an',sql.NVarChar,encryptValue(accountNumber)).input('ana',sql.NVarChar,encryptValue(accountName))
-      .query('INSERT INTO DirectDebitPayments(GroupId,UserId,BankName,AccountNumber,AccountName) VALUES(@gid,@uid,@bn,@an,@ana)');
-    res.json({setup:true});
-  } catch(e){console.error(e);res.status(500).json({error:'Failed to setup direct debit'});}
-});
+r.post('/group/:groupId', (_req,res)=>res.status(409).json({error:'Automatic collection is unavailable. Use bank transfer and submit payment evidence.',code:'DIRECT_DEBIT_UNAVAILABLE'}));
 export default r;

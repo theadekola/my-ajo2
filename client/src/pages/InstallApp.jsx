@@ -29,7 +29,7 @@ export default function InstallApp() {
       <div style={{background:'linear-gradient(135deg,var(--deep),var(--forest))',borderRadius:'var(--r)',padding:'28px 24px',textAlign:'center',marginBottom:24,color:'#fff'}}>
         <img src="/logo.png" alt="My Ajo" style={{width:76,height:76,borderRadius:22,objectFit:'cover',margin:'0 auto 14px',boxShadow:'0 14px 36px rgba(0,0,0,.22)'}} />
         <div style={{fontFamily:"'Inter','Poppins',sans-serif",fontSize:22,fontWeight:800,marginBottom:8}}>My Ajo works as an app!</div>
-        <div style={{fontSize:14,color:'rgba(255,255,255,.7)',maxWidth:400,margin:'0 auto'}}>Install it on your phone for a native app experience - works offline too.</div>
+        <div style={{fontSize:14,color:'rgba(255,255,255,.7)',maxWidth:400,margin:'0 auto'}}>Install it on your phone for a native app experience - connects securely to your account online.</div>
       </div>
 
       <div className="grid-2">
@@ -51,7 +51,7 @@ export default function InstallApp() {
       <div className="card" style={{padding:20,marginTop:0}}>
         <div style={{fontFamily:"'Inter','Poppins',sans-serif",fontSize:14,fontWeight:800,marginBottom:12}}>Benefits of installing</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12}}>
-          {[['lightning','Fast loading','Opens instantly like a native app'],['offline','Works offline','View your data without internet'],['bell','Notifications','Get alerts for payments and payouts'],['monitor','Full screen','No browser bars - immersive experience']].map(([ic,t,s])=>(
+          {[['lightning','Fast loading','Opens instantly like a native app'],['offline','Online account access','An internet connection is needed to load your records'],['bell','Notifications','Get alerts for payments and payouts'],['monitor','Full screen','No browser bars - immersive experience']].map(([ic,t,s])=>(
             <div key={t} style={{background:'var(--mist)',borderRadius:10,padding:14}}>
               <div style={{marginBottom:6,color:'var(--gold)'}}><SvgIcon name={ic} size={22} /></div>
               <div style={{fontWeight:600,fontSize:13,color:'var(--deep)',marginBottom:3}}>{t}</div>

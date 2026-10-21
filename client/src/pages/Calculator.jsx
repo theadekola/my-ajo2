@@ -7,7 +7,10 @@ import { currencyInputChange, formatCurrencyInput, parseCurrencyValue } from '..
 export default function Calculator() {
   const { sym } = useAuth();
   const [form, setForm] = useState({ amount:formatCurrencyInput(10000), members:10, frequency:'Monthly', position:1 });
-  const set = k => e => setForm(f=>({...f,[k]:parseFloat(e.target.value)||e.target.value}));
+  const set = k => e => setForm(f=>{
+    const value=k==='frequency'?e.target.value:Math.max(k==='members'?2:1,Math.min(k==='members'?200:Number(f.members),Math.trunc(Number(e.target.value)||1)));
+    return {...f,[k]:value,...(k==='members'?{position:Math.min(Number(f.position),value)}:{})};
+  });
   const amountValue = parseFloat(parseCurrencyValue(form.amount) || 0);
 
   const periods = form.frequency==='Weekly'?52:form.frequency==='Bi-weekly'?26:12;
@@ -69,7 +72,7 @@ export default function Calculator() {
               ['users','Total Members',form.members],
               ['rotate','Frequency',form.frequency],
               ['calendar','Group Duration',durationLabel],
-              ['clock','Wait for Your Payout',waitCycles===0?'You go first!':`~${waitMonths} ${form.frequency==='Monthly'?'months':'weeks'}`],
+              ['clock','Wait for Your Payout',waitCycles===0?'You go first!':`~${form.frequency==='Monthly'?waitCycles:waitCycles*(form.frequency==='Bi-weekly'?2:1)} ${form.frequency==='Monthly'?'months':'weeks'}`],
               ['trophy','Your Slot',`#${form.position} of ${form.members}`],
               ['trend','Total Group Savings',`${sym}${Number(payoutValue*parseInt(form.members||1)).toLocaleString()}`],
             ].map(([ic,l,v],i)=>(

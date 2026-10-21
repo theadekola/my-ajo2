@@ -1,3 +1,4 @@
+import { useAction } from '../utils/useAction.js';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import SvgIcon from '../components/SvgIcon.jsx';
@@ -8,6 +9,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { saveOrShareBlob } from '../utils/nativeActions.js';
 
 export default function GroupMembers() {
+  const {run:runAction,busy:actionBusy}=useAction();
   const { id } = useParams();
   const navigate = useNavigate();
   const { user, showToast, fmt } = useAuth();
@@ -108,11 +110,7 @@ export default function GroupMembers() {
     }
   };
 
-  const reject = async mid => {
-    await apiPut('/members/' + mid + '/reject', {});
-    showToast('Request rejected');
-    load();
-  };
+  const reject = mid => runAction(async()=>{await apiPut('/members/' + mid + '/reject',{});showToast('Request rejected');await load();});
 
   const openProfile = member => {
     setOpenMenu(null);
@@ -272,7 +270,7 @@ export default function GroupMembers() {
               {isGroupAdmin && (
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button className="btn btn-green btn-sm" onClick={() => openApprovalPayoutDate(m)} style={{ background: 'rgba(46,125,50,.1)', color: 'var(--green)', border: '1.5px solid rgba(46,125,50,.2)' }}><SvgIcon name="calendar" size={15} /> Set Date</button>
-                  <button className="btn btn-red btn-sm" onClick={() => reject(m.MemberId)}><SvgIcon name="x" size={15} /> Reject</button>
+                  <button className="btn btn-red btn-sm" disabled={actionBusy} onClick={() => reject(m.MemberId)}><SvgIcon name="x" size={15} /> Reject</button>
                 </div>
               )}
             </div>

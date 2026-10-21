@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import SvgIcon from '../components/SvgIcon.jsx';
 import { Link, useNavigate } from 'react-router-dom';
@@ -42,6 +42,7 @@ export default function NotificationSettings() {
     notifMember: true,
     notifChat: true
   });
+  const preferenceLock=useRef(false);
   const [busyKey, setBusyKey] = useState('');
   const [pushBusy, setPushBusy] = useState(false);
   const [pushState, setPushState] = useState({
@@ -76,14 +77,6 @@ export default function NotificationSettings() {
             ? serverInfo.nativePlatforms.includes(nativePlatform)
             : !!serverInfo.nativeEnabled;
           const savedToken = localStorage.getItem(NATIVE_PUSH_TOKEN_KEY);
-          const receivedHandle = await PushNotifications.addListener('pushNotificationReceived', notification => {
-            showToast(notification?.title || 'New notification');
-          });
-          const actionHandle = await PushNotifications.addListener('pushNotificationActionPerformed', event => {
-            const url = event?.notification?.data?.url || '/notifications';
-            navigate(url);
-          });
-          cleanup = [receivedHandle, actionHandle];
           setPushState({
             checking: false,
             supported: true,
@@ -130,6 +123,8 @@ export default function NotificationSettings() {
   const saveForm = nextForm => apiPut('/users/me/notification-settings', nextForm);
 
   const toggleSetting = async (key, checked) => {
+    if (preferenceLock.current) return;
+    preferenceLock.current=true;
     const previousForm = form;
     const nextForm = { ...form, [key]: checked };
     setForm(nextForm);
@@ -148,6 +143,7 @@ export default function NotificationSettings() {
       setForm(previousForm);
       showToast(ex.message || 'Notification setting update failed.', 'error');
     } finally {
+      preferenceLock.current=false;
       setBusyKey('');
     }
   };
@@ -180,13 +176,13 @@ export default function NotificationSettings() {
         registrationHandle = registration;
         errorHandle = registrationError;
         timeoutId = setTimeout(() => done(reject, new Error('Push token registration timeout.')), NATIVE_PUSH_TIMEOUT_MS);
-        PushNotifications.register();
+        PushNotifications.register().catch(error=>done(reject,error));
       }).catch(reject);
     }).then(async token => {
       const value = token?.value || '';
       if (!value) throw new Error('Device notification token was not returned.');
-      localStorage.setItem(NATIVE_PUSH_TOKEN_KEY, value);
       await apiPost('/push/native-subscribe', { token: value, platform: nativePlatform, userAgent: navigator.userAgent });
+      localStorage.setItem(NATIVE_PUSH_TOKEN_KEY, value);
       setPushState(s => ({ ...s, supported: true, permission: 'granted', subscribed: true, mode: 'native' }));
       await apiPost('/push/test', {}).catch(() => null);
       showToast(pushState.configured ? 'Mobile push notifications enabled!' : 'Device registered. Add FCM server key on the server to send push alerts.');
@@ -262,7 +258,7 @@ export default function NotificationSettings() {
         <div className="row-sub">{sub}</div>
       </div>
       <label className="toggle">
-        <input type="checkbox" checked={!!form[k]} disabled={busyKey === k} onChange={e => toggleSetting(k, e.target.checked)} aria-label={label} />
+        <input type="checkbox" checked={!!form[k]} disabled={!!busyKey} onChange={e => toggleSetting(k, e.target.checked)} aria-label={label} />
         <span className="tslider" />
       </label>
     </div>

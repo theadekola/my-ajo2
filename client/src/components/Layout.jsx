@@ -4,6 +4,7 @@ import { apiAssetUrl } from '../api/appClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import PageErrorBoundary from './PageErrorBoundary.jsx';
 import SvgIcon from './SvgIcon.jsx';
+import ApiErrorNotice from './ApiErrorNotice.jsx';
 import GlobalSearch from './GlobalSearch.jsx';
 
 const NAV = [
@@ -300,6 +301,7 @@ export default function Layout() {
       {mobileSearchOpen && <div className="mobile-search-overlay"><GlobalSearch /></div>}
 
       <main className={`main ${navMotion} ${railExpanded ? 'sidebar-expanded' : ''}`} ref={mainRef}>
+        <ApiErrorNotice />
         <GlobalSearch />
         <PageErrorBoundary locationKey={location.key}>
           <div key={`${location.pathname}:${location.search}:${refreshKey}`} className="screen-shell">

@@ -36,7 +36,7 @@ export default function Help() {
     setDeleteInfo(null);
     apiGet('/auth/me/delete-info')
       .then(data => { if (!cancelled) setDeleteInfo(data || { memberships: [], adminGroups: [] }); })
-      .catch(() => { if (!cancelled) setDeleteInfo({ memberships: [], adminGroups: [] }); });
+      .catch(error => { if (!cancelled){setDeleteError(error.message||'Could not check memberships. Reopen this dialog to retry.');setDeleteInfo(null);} });
     return () => { cancelled = true; };
   }, [showDelete]);
 
@@ -172,7 +172,7 @@ export default function Help() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
               <button className="btn btn-gh" disabled={busy} onClick={() => setShowDelete(false)}>Cancel</button>
-              <button className="btn btn-red" disabled={busy || !typedNameMatches || blockingAdminGroups.length > 0} onClick={deleteAccount}>{blockingAdminGroups.length ? 'Resolve Groups First' : (busy ? 'Deleting...' : 'Permanently Delete Account')}</button>
+              <button className="btn btn-red" disabled={busy || !deleteInfo || !typedNameMatches || blockingAdminGroups.length > 0} onClick={deleteAccount}>{blockingAdminGroups.length ? 'Resolve Groups First' : (busy ? 'Deleting...' : 'Permanently Delete Account')}</button>
             </div>
           </div>
         </div>

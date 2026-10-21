@@ -1,3 +1,4 @@
+import { useAction } from '../utils/useAction.js';
 import { useEffect, useState } from 'react';
 import SvgIcon from '../components/SvgIcon.jsx';
 import { Link, useNavigate } from 'react-router-dom';
@@ -47,44 +48,26 @@ const NOTIFICATION_ICON_BY_TYPE = {
 const notificationIconName = type => NOTIFICATION_ICON_BY_TYPE[type] || NOTIFICATION_ICON_BY_TYPE.Default;
 
 export default function Notifications() {
+  const {run:runAction,busy:actionBusy}=useAction();
   const { setUnread, showToast } = useAuth();
-  const [notifs, setNotifs] = useState([]);
+  const [notifs, setNotifs] = useState([]);const [totalUnread,setTotalUnread]=useState(0);
   const navigate = useNavigate();
 
-  const load = async () => {
+  const [hasMore,setHasMore]=useState(false);
+  const load = async (offset=0) => {
     try {
-      const data = await apiGet('/notifications');
-      const rows = Array.isArray(data) ? data : [];
-      setNotifs(rows);
-      setUnread(rows.filter(n => !n.IsRead).length);
-    } catch {
-      setNotifs([]);
-      setUnread(0);
-    }
+      const data=await apiGet(`/notifications?paged=1&offset=${offset}`);
+      setNotifs(current=>offset?[...current,...data.items]:data.items);setUnread(data.unread);setTotalUnread(data.unread);setHasMore(data.hasMore);
+    } catch(error){showToast(error.message,'error');}
   };
+  useEffect(()=>{load();},[]);
+  const markAll=()=>runAction(async()=>{await apiPut('/notifications/read-all',{});await load();showToast('All marked as read');});
+  const openNotification=n=>runAction(async()=>{
+    await apiPut('/notifications/'+n.NotificationId+'/read',{});await load();
+    if(n.Link)navigate(n.Link);else if(n.GroupId)navigate('/group/'+n.GroupId);
+  });
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  const markRead = async id => {
-    await apiPut('/notifications/' + id + '/read', {});
-    load();
-  };
-
-  const markAll = async () => {
-    await apiPut('/notifications/read-all', {});
-    showToast('All marked as read');
-    load();
-  };
-
-  const openNotification = async n => {
-    await markRead(n.NotificationId);
-    if (n.Link) navigate(n.Link);
-    else if (n.GroupId) navigate('/group/' + n.GroupId);
-  };
-
-  const unread = notifs.filter(n => !n.IsRead).length;
+  const unread = totalUnread;
 
   return (
     <div className="page-enter">
@@ -94,7 +77,7 @@ export default function Notifications() {
           <div className="ptitle">Notifications</div>
           <div className="psub">{unread} unread</div>
         </div>
-        {unread > 0 && <button className="btn btn-gh btn-sm" onClick={markAll}>Mark all read</button>}
+        {unread > 0 && <button className="btn btn-gh btn-sm" disabled={actionBusy} onClick={markAll}>Mark all read</button>}
       </div>
 
       <div className="card">
@@ -123,6 +106,7 @@ export default function Notifications() {
             <div style={{ color: 'var(--muted)', fontSize: 13 }}>No notifications yet</div>
           </div>
         )}
+        {hasMore&&<button className="btn btn-gh" disabled={actionBusy} onClick={()=>runAction(()=>load(notifs.length))}>Load more notifications</button>}
       </div>
     </div>
   );

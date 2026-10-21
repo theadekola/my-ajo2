@@ -79,7 +79,7 @@ r.put('/me', async (req,res) => {
       return res.status(400).json({ error:'Complete all required profile fields', code:'PROFILE_REQUIRED', fields:missing });
     }
 const pool = await getPool();
-    await pool.request()
+    const changed=await pool.request()
       .input('id',sql.Int,req.user.userId)
       .input('fn',sql.NVarChar,String(firstName).trim()).input('ln',sql.NVarChar,String(lastName).trim())
       .input('ti',sql.NVarChar,String(title).trim()).input('ph',sql.NVarChar,encryptValue(String(phone).trim()))
@@ -102,8 +102,14 @@ const pool = await getPool();
               Language=@la,AvatarColor=@av,Bio=@bi,DateOfBirth=@db,
               BankName=@bn,BankAccountNumber=@ba,BankAccountName=@bna,BankRoutingCode=@br,
               NotifPayment=@np,NotifPayout=@no,NotifMember=@nm,NotifChat=@nc,
-              UpdatedAt=SYSUTCDATETIME() WHERE UserId=@id`);
-    res.json({ updated:true });
+              ProfileEditedAt=SYSUTCDATETIME(),UpdatedAt=SYSUTCDATETIME()
+              OUTPUT INSERTED.ProfileEditedAt
+              WHERE UserId=@id AND (ProfileEditedAt IS NULL OR ProfileEditedAt<=DATEADD(day,-30,SYSUTCDATETIME()))`);
+    if(!changed.recordset[0]){
+      const current=await pool.request().input('id',sql.Int,req.user.userId).query('SELECT DATEADD(day,30,ProfileEditedAt) NextEditAt FROM Users WHERE UserId=@id');
+      return res.status(409).json({error:'Profile can only be edited every 30 days.',code:'PROFILE_EDIT_LOCKED',nextEditAt:current.recordset[0]?.NextEditAt});
+    }
+    res.json({ updated:true,profileEditedAt:changed.recordset[0].ProfileEditedAt });
   } catch(e){ console.error(e); res.status(500).json({ error:'Update failed' }); }
 });
 

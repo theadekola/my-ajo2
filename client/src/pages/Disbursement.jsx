@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import MfaActionGate from '../components/MfaActionGate.jsx';
+import { useAction } from '../utils/useAction.js';
+import { useEffect, useRef, useState } from 'react';
 import SvgIcon from '../components/SvgIcon.jsx';
 import { useParams, Link } from 'react-router-dom';
-import { apiAssetUrl, apiGet, apiPut, apiUpload } from '../api/appClient.js';
+import { apiAssetUrl, apiGet, apiPut, apiUpload, apiPost } from '../api/appClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { currencyInputChange, formatCurrencyInput, parseCurrencyValue } from '../utils/currencyInput.js';
 import { fetchPrivateFile, isNativeApp, saveBlobToDevice } from '../utils/nativeActions.js';
@@ -13,7 +15,9 @@ const localDate = () => {
 };
 
 export default function Disbursement() {
+  const {run:runAction,busy:actionBusy}=useAction();
   const { id } = useParams();
+  const requestRef=useRef(null);
   const { fmt, showToast, sym } = useAuth();
   const [tab, setTab] = useState('instant');
   const [members, setMembers] = useState([]);
@@ -99,7 +103,10 @@ export default function Disbursement() {
     if (instant && !evidence) return showToast('Attach payment evidence before recording an instant payout','error');
     setBusy(true);
     try {
+      const fingerprint=JSON.stringify({id,selected:selected.UserId,form,instant,evidence:evidence?[evidence.name,evidence.size,evidence.lastModified]:null});
+      if(requestRef.current?.fingerprint!==fingerprint)requestRef.current={fingerprint,key:crypto.randomUUID()};
       const data = new FormData();
+      data.append('requestKey',requestRef.current.key);
       data.append('groupId', id);
       data.append('recipientId', selected.UserId);
       data.append('amount', parseFloat(parseCurrencyValue(form.amount)));
@@ -115,6 +122,7 @@ export default function Disbursement() {
       await apiUpload('/payouts', data);
       showToast(instant ? 'Instant payout recorded and member notified' : `Payout scheduled and ${selected.FirstName} has been notified`);
       load();
+      requestRef.current=null;
       setEvidence(null);
       setTab('history');
     } catch (error) {
@@ -124,12 +132,9 @@ export default function Disbursement() {
     }
   };
 
-  const markPaid = async payoutId => {
-    await apiPut('/payouts/'+payoutId+'/paid',{});
-    showToast('Marked as paid');
-    load();
-  };
+  const markPaid = payoutId => runAction(async()=>{await apiPut('/payouts/'+payoutId+'/paid',{});showToast('Marked as paid');await load();});
 
+  const advanceCycle=()=>runAction(async()=>{if(!window.confirm('Complete this cycle after all contributions and its payout are confirmed?'))return;const result=await apiPost(`/groups/${id}/advance-cycle`,{currentCycle:form.cycleNumber});showToast(result.completed?'Savings round completed.':`Cycle ${result.currentCycle} is ready.`);load();});
   const tabs = [
     ['instant','Instant Payout'],
     ['schedule','Schedule Payout'],
@@ -137,7 +142,7 @@ export default function Disbursement() {
   ];
 
   return (
-    <div className="page-enter">
+    <MfaActionGate><div className="page-enter">
       <div className="topbar">
         <div>
           <Link to={'/group/'+id} className="back-link"><SvgIcon name="arrowLeft" size={18}/><span>Back</span></Link>
@@ -152,7 +157,7 @@ export default function Disbursement() {
 
       {tab === 'history' ? (
         <div className="card">
-          <div className="card-hd"><div className="card-ttl">Payouts History</div><span className="badge b-gray">{payouts.length}</span></div>
+          <div className="card-hd"><div className="card-ttl">Payouts History</div><button className="btn btn-gh btn-sm" disabled={actionBusy} onClick={advanceCycle}>Complete current cycle</button><span className="badge b-gray">{payouts.length}</span></div>
           {payouts.map(payout=>(
             <div className="row" key={payout.PayoutId}>
               <div className="row-ic" style={{background:payout.Status==='Paid'?'rgba(46,125,50,.12)':'rgba(255,193,7,.1)'}}><SvgIcon name={payout.Status==='Paid' ? 'check' : 'clock'} size={18} /></div>
@@ -163,7 +168,7 @@ export default function Disbursement() {
               </div>
               <div style={{textAlign:'right'}}>
                 <div style={{fontWeight:700,fontSize:13}}>{fmt(payout.TotalPayout??payout.Amount)}</div>
-                {payout.Status==='Scheduled' ? <button className="btn btn-g btn-sm" type="button" style={{marginTop:4,fontSize:11}} onClick={()=>markPaid(payout.PayoutId)}>Mark Paid</button> : <span className="badge b-green">Paid</span>}
+                {payout.Status==='Scheduled' ? <button className="btn btn-g btn-sm" type="button" style={{marginTop:4,fontSize:11}} disabled={actionBusy} onClick={()=>markPaid(payout.PayoutId)}>Mark Paid</button> : <span className="badge b-green">Paid</span>}
               </div>
             </div>
           ))}
@@ -239,6 +244,6 @@ export default function Disbursement() {
           </div>
         </div>
       )}
-    </div>
+    </div></MfaActionGate>
   );
 }

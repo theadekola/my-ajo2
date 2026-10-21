@@ -1,7 +1,7 @@
 import SvgIcon from '../components/SvgIcon.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { State } from 'country-state-city';
+import * as State from '../data/subdivisions.js';
 import { apiPost } from '../api/appClient.js';
 import { COUNTRIES, useAuth } from '../context/AuthContext.jsx';
 import { inviteJoinPath, readPendingInvite, savePendingInvite } from '../utils/pendingInvite.js';
@@ -279,14 +279,7 @@ export default function Auth() {
       setLocalities([...(NIGERIA_LGAS[selectedSubdivision.name] || [])].sort((a, b) => a.localeCompare(b)));
       return () => { active = false; };
     }
-    import('country-state-city').then(({ City }) => {
-      if (!active) return;
-      const places = City.getCitiesOfState(country.code, selectedSubdivision.isoCode)
-        .map(item => item.name)
-        .filter((name, index, names) => index === 0 || name !== names[index - 1])
-        .sort((a, b) => a.localeCompare(b));
-      setLocalities(places);
-    }).catch(() => active && setLocalities([]));
+    setLocalities([]); // A free-text local area is available where no curated list is supplied.
     return () => { active = false; };
   }, [country.code, selectedSubdivision?.name, selectedSubdivision?.isoCode]);
 

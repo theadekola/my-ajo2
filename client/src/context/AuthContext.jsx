@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { apiGet, apiPost, apiPublicPost, apiUpload } from '../api/appClient.js';
+import { apiGet, apiPost, apiPublicPost, apiUpload, resetApiSecurity } from '../api/appClient.js';
 import SvgIcon from '../components/SvgIcon.jsx';
 
 const AuthCtx = createContext(null);
@@ -72,10 +72,10 @@ export function AuthProvider({ children }) {
       const u = await apiGet('/auth/me');
       setUser(u);
       if (u) {
-        const dash = await apiGet('/users/dashboard').catch(() => ({}));
-        setUnread(dash.UnreadNotifications || 0);
+        const dash = await apiGet('/users/dashboard').catch(() => null);
+        if(dash)setUnread(dash.UnreadNotifications || 0);
       }
-    } catch { setUser(null); }
+    } catch(error) { if([401,403].includes(error.status))setUser(null);else showToast(error.message||'Could not refresh account information.','error'); }
   }, []);
 
   useEffect(() => {
@@ -85,8 +85,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!user) return;
     const refreshUnread = async () => {
-      const dash = await apiGet('/users/dashboard').catch(() => ({}));
-      setUnread(dash.UnreadNotifications || 0);
+      const dash = await apiGet('/users/dashboard').catch(() => null);
+      if(dash)setUnread(dash.UnreadNotifications || 0);
     };
     const refreshWhenVisible = () => {
       if (!document.hidden) refreshUnread();
@@ -102,9 +102,12 @@ export function AuthProvider({ children }) {
     };
   }, [user?.UserId]);
 
+  useEffect(()=>{const revoked=event=>{if(event.detail?.status===401||event.detail?.code==='PASSWORD_RESET_REQUIRED'){resetApiSecurity();setUser(null);setUnread(0);}};window.addEventListener('myajo:session-expired',revoked);return()=>window.removeEventListener('myajo:session-expired',revoked);},[]);
+
   const login = async (email, password) => {
     // Login is unauthenticated and the API does not require a CSRF cookie for it.
     // Avoid a separate CSRF bootstrap request, which can be blocked by a native WebView.
+    resetApiSecurity();
     const response = await apiPublicPost('/auth/login', { email, password });
     if (response.user) setUser(response.user);
     return response;
@@ -130,7 +133,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try { await apiPost('/auth/logout', {}); }
-    finally { setUser(null); }
+    finally { resetApiSecurity(); setUser(null);setUnread(0); }
   };
   const isAdmin = ['Admin','SuperAdmin'].includes(user?.SystemRole);
   const canCreateGroups = user?.OrganizerStatus === 'Approved' && !!user?.CanCreateGroups;
@@ -147,7 +150,7 @@ export function AuthProvider({ children }) {
           transform:'translateX(-50%)',
           background: toast.type==='error' ? '#C62828' : '#0E1A12',
           color:'#fff', padding:'12px 22px', borderRadius:12, fontSize:13,
-          fontWeight:500, zIndex:9999, whiteSpace:'nowrap',
+          fontWeight:500, zIndex:9999, whiteSpace:'normal', maxWidth:'calc(100vw - 32px)', width:'max-content', overflowWrap:'anywhere', textAlign:'center',
           boxShadow:'0 8px 32px rgba(0,0,0,.3)',
           animation:'fadeUp .3s ease'
         }}>

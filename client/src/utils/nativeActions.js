@@ -1,3 +1,4 @@
+import { fetchWithDeadline } from './request.js';
 import { Capacitor } from '@capacitor/core';
 
 export const isNativeApp = () => Capacitor.isNativePlatform?.() || false;
@@ -10,7 +11,7 @@ export const publicAppBaseUrl = () => {
   return String(configured).replace(/\/api\/?$/i, '').replace(/\/$/, '');
 };
 
-export const inviteUrl = code => `${publicAppBaseUrl()}/invite/${encodeURIComponent(code)}`;
+export const inviteUrl = code => `${publicAppBaseUrl()}/#/invite/${encodeURIComponent(code)}`;
 
 const blobToBase64 = blob => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -66,9 +67,10 @@ export async function saveUrlToDevice(url, fileName) {
   const name = fileName || fileNameFromUrl(value);
 
   if (isNativeApp()) {
-    const response = await fetch(value, { credentials: 'include' });
-    if (!response.ok) throw new Error('Could not download evidence file.');
-    const blob = await response.blob();
+    const blob = await fetchWithDeadline(value, { credentials: 'include' }, async response => {
+      if (!response.ok) throw new Error('Could not download evidence file.');
+      return response.blob();
+    });
     const { Filesystem, Directory } = await import('@capacitor/filesystem');
     await Filesystem.writeFile({
       path: name,
@@ -91,7 +93,7 @@ export async function saveUrlToDevice(url, fileName) {
 export async function fetchPrivateFile(url, fallbackName = 'my-ajo-evidence') {
   const value = String(url || '');
   if (!value) throw new Error('No file to open.');
-  const response = await fetch(value, { credentials: 'include' });
+  return fetchWithDeadline(value, { credentials: 'include' }, async response => {
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.error || 'Could not open evidence file.');
@@ -116,6 +118,7 @@ export async function fetchPrivateFile(url, fallbackName = 'my-ajo-evidence') {
     contentType,
     fileName: encodedName ? decodeURIComponent(encodedName) : quotedName || (extension ? `${fallbackName}.${extension}` : fileNameFromUrl(value, fallbackName)),
   };
+  });
 }
 
 export async function saveBlobToDevice(blob, fileName) {

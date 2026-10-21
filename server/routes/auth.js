@@ -485,6 +485,10 @@ r.post('/register', profileUpload.single('profilePicture'), async (req, res) => 
   }
 });
 /* POST /api/auth/login */
+function publicUser(user){
+  const safe={...user};for(const key of ['PasswordHash','MfaSecret','MfaPendingSecret','MfaRecoveryCodes'])delete safe[key];return decryptRecord(safe,['Phone','Address','BankName','BankAccountNumber','BankAccountName','BankRoutingCode']);
+}
+
 r.post('/login', async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
@@ -531,6 +535,7 @@ r.post('/login', async (req, res) => {
       user = refreshed.recordset[0] || user;
     }
 
+    if (user.MustResetPassword) return res.status(403).json({error:'Your administrator requires a password reset. Use Forgot password to receive a reset code.',code:'PASSWORD_RESET_REQUIRED'});
     const rounds = bcrypt.getRounds(user.PasswordHash);
     if (rounds < PASSWORD_ROUNDS) {
       const strongerHash = await bcrypt.hash(password, PASSWORD_ROUNDS);
@@ -550,7 +555,7 @@ r.post('/login', async (req, res) => {
     delete user.PasswordHash;
     Object.assign(user, decryptRecord(user, ['Phone','Address','BankName','BankAccountNumber','BankAccountName','BankRoutingCode']));
     setAuthCookie(res, user);
-    res.json({ user, recovered: user.AccountDeletionStatus === 'Recovered' });
+    res.json({ user:publicUser(user), recovered: user.AccountDeletionStatus === 'Recovered' });
   } catch(e){ console.error(e); res.status(500).json({ error:'Login failed' }); }
 });
 /* GET /api/auth/me */
@@ -561,7 +566,7 @@ r.get('/me', requirePendingAuth, async (req, res) => {
             Occupation,CountryCode,CurrencyCode,CurrencySymbol,Language,AvatarColor,Bio,DateOfBirth,
             BankName,BankAccountNumber,BankAccountName,BankRoutingCode,
             SystemRole,IsProtectedAccount,OrganizerStatus,CanCreateGroups,MfaEnabled,IsEmailVerified,OnboardingDone,
-            NotifPayment,NotifPayout,NotifMember,NotifChat,AdminGroupMembersAnonymous,AccountDeletionStatus,AccountDeletionRequestedAt,AccountDeletionDueAt,CreatedAt
+            NotifPayment,NotifPayout,NotifMember,NotifChat,AdminGroupMembersAnonymous,AccountDeletionStatus,AccountDeletionRequestedAt,AccountDeletionDueAt,ProfileEditedAt,CreatedAt
             FROM Users WHERE UserId=@id`);
   const responseUser=decryptRecord(r2.recordset[0], ['Phone','Address','BankName','BankAccountNumber','BankAccountName','BankRoutingCode']);
   if(req.user?.mfaVerifiedAt) responseUser.MfaVerifiedAt=req.user.mfaVerifiedAt;
@@ -622,7 +627,7 @@ r.post('/reset-password', async (req, res) => {
     if(!verified.ok) return res.status(verified.locked?429:400).json({error:verified.locked?'Too many incorrect attempts. Request a new code.':'Invalid or expired code'});
     const hash = await bcrypt.hash(newPassword, PASSWORD_ROUNDS);
     await pool.request().input('e',sql.NVarChar,email).input('h',sql.NVarChar,hash)
-      .query('UPDATE Users SET PasswordHash=@h,TokenVersion=TokenVersion+1 WHERE Email=@e');
+      .query('UPDATE Users SET PasswordHash=@h,MustResetPassword=0,TokenVersion=TokenVersion+1,UpdatedAt=SYSUTCDATETIME() WHERE Email=@e AND IsActive=1');
     res.json({ reset: true });
   } catch(e){ console.error(e); res.status(500).json({ error:'Reset failed' }); }
 });
@@ -696,7 +701,7 @@ r.post('/mfa/login/verify', async (req,res) => {
       .query(`SELECT * FROM dbo.Users WHERE UserId=@uid AND IsActive=1
               AND (LockedUntil IS NULL OR LockedUntil<=SYSUTCDATETIME())`);
     const user=found.recordset[0];
-    if(!user || !user.MfaEnabled || Number(user.TokenVersion)!==Number(claims.tokenVersion)) {
+    if(!user || user.MustResetPassword || !user.MfaEnabled || Number(user.TokenVersion)!==Number(claims.tokenVersion)) {
       return res.status(401).json({error:'MFA challenge has expired',code:'SESSION_REVOKED'});
     }
     const secret=decryptMfaValue(user.MfaSecret);
@@ -715,11 +720,17 @@ r.post('/mfa/login/verify', async (req,res) => {
     user.MfaVerifiedAt=new Date().toISOString();
     delete user.PasswordHash;
     setAuthCookie(res,user);
-    res.json({user:decryptRecord(user,['Phone','Address','BankName','BankAccountNumber','BankAccountName','BankRoutingCode'])});
+    res.json({user:publicUser(user)});
   } catch(error) {
     if(error?.name==='JsonWebTokenError'||error?.name==='TokenExpiredError') return res.status(401).json({error:'Invalid or expired MFA challenge'});
     console.error(error); res.status(500).json({error:'Could not verify MFA'});
   }
+});
+
+r.post('/mfa/challenge', requireAuth, async (req,res)=>{
+  if(!req.user.mfaEnabled)return res.status(403).json({error:'Set up an authenticator under Account security first.',code:'MFA_ENROLLMENT_REQUIRED'});
+  const mfaTicket=jwt.sign({purpose:'mfa-login',userId:req.user.userId,tokenVersion:req.user.tokenVersion},JWT_SECRET,{algorithm:'HS256',expiresIn:'5m'});
+  res.json({mfaRequired:true,mfaTicket});
 });
 
 r.post('/mfa/admin/challenge', requireAuth, async (req,res) => {
@@ -729,7 +740,7 @@ r.post('/mfa/admin/challenge', requireAuth, async (req,res) => {
       .query(`SELECT * FROM dbo.Users WHERE UserId=@uid AND IsActive=1
               AND (LockedUntil IS NULL OR LockedUntil<=SYSUTCDATETIME())`);
     const user=found.recordset[0];
-    if(!user || user.SystemRole!=='SuperAdmin') {
+    if(!user || !['Admin','SuperAdmin'].includes(user.SystemRole)) {
       return res.status(403).json({error:'Super administrator only',code:'SUPER_ADMIN_ONLY'});
     }
     if(!user.MfaEnabled) {
