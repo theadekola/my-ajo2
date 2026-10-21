@@ -1,3 +1,5 @@
+import { withTransaction, positiveInt, fail } from '../utils/operations.js';
+import { enqueuePush, deliverPushOutbox } from '../services/pushOutbox.js';
 import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -141,7 +143,7 @@ r.post('/', async (req,res) => {
       .input('ru',sql.NVarChar,receiptUrl||null).input('no',sql.NVarChar,encryptValue(note))
       .query(`INSERT INTO Contributions(GroupId,UserId,CycleNumber,Amount,Method,ReferenceNo,ReceiptUrl,Note)
               OUTPUT INSERTED.ContributionId VALUES(@gid,@uid,@cy,@am,@me,@re,@ru,@no)`);
-    const body = `${req.user.name} submitted a payment of ${amount} for ${GroupName}`;
+    const body = `A member submitted a payment of ${amount} for ${GroupName}`;
     try {
       await pool.request().input('uid',sql.Int,AdminUserId).input('gid',sql.Int,parseInt(groupId))
         .input('b',sql.NVarChar,body)
@@ -152,7 +154,7 @@ r.post('/', async (req,res) => {
     }
     const contributionId=result.recordset[0].ContributionId;
     await recordActivity({ eventType:'contribution.created', category:'contributions', title:'Contribution submitted',
-      description:`${req.user.name} submitted a contribution to ${GroupName}`, userId:req.user.userId,
+      description:`A contribution was submitted to ${GroupName}`, userId:req.user.userId,
       groupId:parseInt(groupId), entityId:contributionId, entityType:'Contribution', amount:numericAmount,
       severity:'info' });
     await cacheDeletePattern('dashboard:user:*');
@@ -173,42 +175,31 @@ r.post('/', async (req,res) => {
   }
 });
 
-r.put('/:id/confirm', async (req,res) => {
-  const pool=await getPool();
-  const access=await pool.request().input('id',sql.Int,parseInt(req.params.id)).input('uid',sql.Int,req.user.userId)
-    .query("SELECT gm.Role FROM Contributions c JOIN GroupMembers gm ON gm.GroupId=c.GroupId AND gm.UserId=@uid AND gm.Status='Approved' WHERE c.ContributionId=@id");
-  if(access.recordset[0]?.Role!=='Admin') return res.status(403).json({error:'Group admin only'});
-  const c=await pool.request().input('id',sql.Int,parseInt(req.params.id))
-    .query('SELECT UserId,GroupId FROM Contributions WHERE ContributionId=@id');
-  await pool.request().input('id',sql.Int,parseInt(req.params.id)).input('rid',sql.Int,req.user.userId)
-    .query(`UPDATE Contributions SET Status='Confirmed',ReviewedBy=@rid,ReviewedAt=SYSUTCDATETIME() WHERE ContributionId=@id`);
-  if(c.recordset.length){
-    const {UserId,GroupId}=c.recordset[0];
-    await pool.request().input('uid',sql.Int,UserId).input('gid',sql.Int,GroupId)
-      .query(`INSERT INTO Notifications(UserId,GroupId,Type,Title,Body) VALUES(@uid,@gid,'PaymentConfirmed','Payment Confirmed','Your contribution has been confirmed by the admin.')`);
-    await sendPushToUser(pool, sql, UserId, { type:'PaymentConfirmed', title:'Payment Confirmed', body:'Your contribution has been confirmed by the admin.', url:`/group/${GroupId}/contributions` });
-    const details=await pool.request().input('id',sql.Int,parseInt(req.params.id)).query(`SELECT c.Amount,g.GroupName,g.CurrencyCode FROM Contributions c JOIN AjoGroups g ON g.GroupId=c.GroupId WHERE c.ContributionId=@id`);
-    const item=details.recordset[0];
-    await recordActivity({ eventType:'contribution.confirmed', category:'contributions', title:'Contribution received',
-      description:`A contribution was confirmed for ${item?.GroupName || 'a savings group'}`, userId:UserId, groupId:GroupId,
-      entityId:parseInt(req.params.id), entityType:'Contribution', amount:item?.Amount, currency:item?.CurrencyCode, severity:'success' });
-  }
-  await cacheDeletePattern('dashboard:user:*');
-  res.json({confirmed:true});
-});
-
-r.put('/:id/reject', async (req,res) => {
-  const pool=await getPool();
-  const access=await pool.request().input('id',sql.Int,parseInt(req.params.id)).input('uid',sql.Int,req.user.userId)
-    .query("SELECT gm.Role FROM Contributions c JOIN GroupMembers gm ON gm.GroupId=c.GroupId AND gm.UserId=@uid AND gm.Status='Approved' WHERE c.ContributionId=@id");
-  if(access.recordset[0]?.Role!=='Admin') return res.status(403).json({error:'Group admin only'});
-  const contribution=await pool.request().input('id',sql.Int,parseInt(req.params.id)).query('SELECT UserId,GroupId,Amount FROM Contributions WHERE ContributionId=@id');
-  await pool.request().input('id',sql.Int,parseInt(req.params.id)).input('rid',sql.Int,req.user.userId)
-    .query(`UPDATE Contributions SET Status='Rejected',ReviewedBy=@rid,ReviewedAt=SYSUTCDATETIME() WHERE ContributionId=@id`);
-  if(contribution.recordset[0]) await recordActivity({ eventType:'contribution.failed', category:'contributions', title:'Contribution needs attention',
-    description:'A submitted contribution was rejected', userId:contribution.recordset[0].UserId, groupId:contribution.recordset[0].GroupId,
-    entityId:parseInt(req.params.id), entityType:'Contribution', amount:contribution.recordset[0].Amount, severity:'error' });
-  await cacheDeletePattern('dashboard:user:*');
-  res.json({rejected:true});
-});
+async function reviewContribution(req,res,next,status){
+  try {
+    const id=positiveInt(req.params.id);if(!id)throw fail(400,'Invalid contribution ID');
+    const pool=await getPool();
+    const item=await withTransaction(pool,async connection=>{
+      const access=await connection.request().input('id',sql.Int,id).input('uid',sql.Int,req.user.userId)
+        .query("SELECT gm.Role FROM Contributions c JOIN GroupMembers gm ON gm.GroupId=c.GroupId AND gm.UserId=@uid AND gm.Status='Approved' WHERE c.ContributionId=@id");
+      if(access.recordset[0]?.Role!=='Admin')throw fail(403,'Group admin only');
+      const changed=await connection.request().input('id',sql.Int,id).input('rid',sql.Int,req.user.userId).input('status',sql.NVarChar,status)
+        .query(`UPDATE Contributions SET Status=@status,ReviewedBy=@rid,ReviewedAt=SYSUTCDATETIME()
+          OUTPUT INSERTED.UserId,INSERTED.GroupId,INSERTED.Amount WHERE ContributionId=@id AND Status='Pending'`);
+      const row=changed.recordset[0];if(!row)throw fail(409,'This contribution has already been reviewed');
+      const title=status==='Confirmed'?'Payment confirmed':'Payment rejected';
+      const body=status==='Confirmed'?'Your contribution has been confirmed by the admin.':'Your contribution was rejected. Please contact the group admin.';
+      await connection.request().input('uid',sql.Int,row.UserId).input('gid',sql.Int,row.GroupId).input('type',sql.NVarChar,'Payment'+status).input('title',sql.NVarChar,title).input('body',sql.NVarChar,body)
+        .query('INSERT Notifications(UserId,GroupId,Type,Title,Body) VALUES(@uid,@gid,@type,@title,@body)');
+      await enqueuePush(connection,row.UserId,{type:'Payment'+status,title,body,url:`/group/${row.GroupId}/contributions`});
+      return row;
+    });
+    await recordActivity({eventType:status==='Confirmed'?'contribution.confirmed':'contribution.failed',category:'contributions',title:'Contribution '+status.toLowerCase(),userId:item.UserId,groupId:item.GroupId,entityId:id,entityType:'Contribution',amount:item.Amount});
+    await cacheDeletePattern('dashboard:user:*').catch(()=>{});
+    void deliverPushOutbox(pool);
+    res.json({status});
+  }catch(error){if(error.status)return res.status(error.status).json({error:error.message});next(error);}
+}
+r.put('/:id/confirm',(req,res,next)=>reviewContribution(req,res,next,'Confirmed'));
+r.put('/:id/reject',(req,res,next)=>reviewContribution(req,res,next,'Rejected'));
 export default r;

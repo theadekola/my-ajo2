@@ -8,12 +8,13 @@ export default function GroupDetail() {
   const { id } = useParams();
   const { fmt, user, showToast, setUnread } = useAuth();
   const [group, setGroup] = useState(null);
+  const [loadError,setLoadError]=useState('');
   const [notifications, setNotifications] = useState([]);
   const [privacyBusy, setPrivacyBusy] = useState(false);
   const [menuView, setMenuView] = useState(() => localStorage.getItem('myajo:groupMenuView') || 'list');
 
   useEffect(() => {
-    apiGet('/groups/' + id).then(setGroup).catch(() => {});
+    apiGet('/groups/' + id).then(setGroup).catch(error => setLoadError(error.message));
     let alive = true;
     const loadNotifications = () => apiGet('/notifications')
       .then(rows => { if (alive) setNotifications(Array.isArray(rows) ? rows : []); })
@@ -33,6 +34,7 @@ export default function GroupDetail() {
     };
   }, [id]);
 
+  if (loadError) return <div className="err-msg" role="alert">{loadError}<button className="btn btn-gh" onClick={()=>window.location.reload()}>Retry loading group</button></div>;
   if (!group) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Loading group...</div>;
 
   const isGroupAdmin = group.AdminUserId === user?.UserId;
@@ -127,7 +129,8 @@ export default function GroupDetail() {
             {[
               ['Contribution', fmt(group.ContributionAmount) + '/' + group.Frequency],
               ['Members', group.MemberCount + '/' + group.MaxMembers],
-              ['Collected', fmt(expectedCyclePot || group.CollectedThisCycle || 0)],
+              ['Collected', fmt(group.CollectedThisCycle || 0)],
+              ['Cycle target', fmt(expectedCyclePot)],
               ['Status', group.Status],
               ['Cycle', '#' + group.CurrentCycle],
               ['My Slot', '#' + (myMember?.SlotNumber || '-')]

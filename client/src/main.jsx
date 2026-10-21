@@ -3,8 +3,13 @@ import ReactDOM from 'react-dom/client';
 import { SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { HashRouter } from 'react-router-dom';
 import App from './App.jsx';
+import { nativeBackRoute } from './utils/appRoutes.js';
 import { AuthProvider } from './context/AuthContext.jsx';
 import './styles.css';
+
+if (!window.location.hash && /^\/(invite\/|group\/|auth|notifications)/.test(window.location.pathname)) {
+  window.history.replaceState(null, '', `/#${window.location.pathname}${window.location.search}`);
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -44,15 +49,10 @@ if (isNativeCapacitor) {
   Promise.allSettled([
     import('@capacitor/app').then(({ App: NativeApp }) => {
       NativeApp.addListener('backButton', ({ canGoBack }) => {
-        const primaryPaths = new Set(['/dashboard', '/groups', '/contributions', '/calendar', '/more']);
-        if (canGoBack && !primaryPaths.has(window.location.pathname)) {
-          window.history.back();
-        } else if (window.location.pathname !== '/dashboard') {
-          window.history.pushState(null, '', '/dashboard');
-          window.dispatchEvent(new PopStateEvent('popstate'));
-        } else {
-          NativeApp.minimizeApp?.();
-        }
+        const action = nativeBackRoute(window.location.hash, canGoBack);
+        if (action === 'back') window.history.back();
+        else if (action === 'minimize') NativeApp.minimizeApp?.();
+        else window.location.hash = action;
       });
     }),
     import('@capacitor/status-bar').then(({ StatusBar, Style }) => {

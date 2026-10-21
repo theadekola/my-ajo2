@@ -1,3 +1,4 @@
+import { dayKey,mergePayoutDates,upcomingPayouts } from '../utils/calendarEvents.js';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiGet } from '../api/appClient.js';
@@ -23,6 +24,7 @@ export default function Calendar() {
               .filter(member => member.PayoutDate && member.Status === 'Approved')
               .map(member => ({
                 PayoutId: 'assigned-' + member.MemberId,
+                RecipientId:member.UserId,
                 GroupId: group.GroupId,
                 GroupName: group.GroupName,
                 RecipientName: ((member.FirstName || '') + ' ' + (member.LastName || '')).trim() || 'Member',
@@ -45,14 +47,15 @@ export default function Calendar() {
   const selectedInView = selectedDate.getFullYear() === year && selectedDate.getMonth() === month;
   const selectedDay = selectedInView ? selectedDate.getDate() : null;
 
+  const calendarPayouts=mergePayoutDates(payouts,assignedPayouts);
   const eventsOnDay = day => {
-    const d = new Date(year,month,day).toDateString();
-    const po = [...payouts, ...assignedPayouts].filter(p => p.ScheduledFor && new Date(p.ScheduledFor).toDateString() === d);
-    const co = contribs.filter(c => c.PaidAt && new Date(c.PaidAt).toDateString() === d);
+    const d = dayKey(new Date(year,month,day));
+    const po = calendarPayouts.filter(p => dayKey(p.ScheduledFor) === d);
+    const co = contribs.filter(c => c.PaidAt && dayKey(c.PaidAt) === d);
     return { payouts:po, contributions:co };
   };
 
-  const upcoming = [...payouts, ...assignedPayouts].filter(p => p.ScheduledFor && new Date(p.ScheduledFor) >= new Date()).sort((a,b)=>new Date(a.ScheduledFor)-new Date(b.ScheduledFor)).slice(0, 5);
+  const upcoming = upcomingPayouts(calendarPayouts,dayKey(new Date()));
   const selectedEvents = selectedInView ? eventsOnDay(selectedDay) : { payouts:[], contributions:[] };
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const monthName = viewDate.toLocaleString('default',{month:'long',year:'numeric'});

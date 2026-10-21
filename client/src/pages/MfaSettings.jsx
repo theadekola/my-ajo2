@@ -1,9 +1,12 @@
+import { copyText } from '../utils/nativeActions.js';
+import { Link,useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { apiPost } from '../api/appClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function MfaSettings(){
   const {user,refreshUser,logout}=useAuth();
+  const location=useLocation();const requested=new URLSearchParams(location.search).get('returnTo');const returnTo=requested?.startsWith('/group/')?requested:'/more';
   const [setup,setSetup]=useState(null);
   const [code,setCode]=useState('');
   const [password,setPassword]=useState('');
@@ -33,7 +36,7 @@ export default function MfaSettings(){
     event.preventDefault();setBusy(true);setError('');
     try{
       await apiPost('/auth/mfa/disable',{password,code});
-      await logout();window.location.assign('/auth');
+      await logout();window.location.hash='/auth';
     }catch(ex){setError(ex.message);setBusy(false);}
   };
 
@@ -56,7 +59,7 @@ export default function MfaSettings(){
       {!!recoveryCodes.length&&<>
         <h3>Recovery codes</h3><p>Store these somewhere private. Each code works once.</p>
         <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8,margin:'18px 0'}}>{recoveryCodes.map(item=><code key={item}>{item}</code>)}</div>
-        <button className="btn" onClick={()=>navigator.clipboard.writeText(recoveryCodes.join('\n'))}>Copy codes</button>
+        <button className="btn" onClick={async()=>{try{await copyText(recoveryCodes.join('\n'));setMessage('Recovery codes copied. Store them privately.');}catch(ex){setError(ex.message);}}}>Copy codes</button>
       </>}
       {user?.MfaEnabled&&!recoveryCodes.length&&<form onSubmit={disable}>
         <p>MFA is enabled. Disabling it requires your password and a current authenticator code, and signs out every device.</p>
@@ -65,5 +68,6 @@ export default function MfaSettings(){
         <button className="btn btn-danger" disabled={busy}>{busy?'Disabling...':'Disable MFA'}</button>
       </form>}
     </div>
+    {user?.MfaEnabled&&<Link className="btn btn-g" to={returnTo}>Continue after saving recovery codes</Link>}
   </div>;
 }

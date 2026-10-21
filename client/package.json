@@ -14,7 +14,9 @@
     "cap:clean-flatdir": "node scripts/remove-capacitor-flatdir.cjs",
     "cap:sync": "vite build --mode mobile && npm run mobile:patch-assets && cap sync && npm run mobile:patch-assets && npm run cap:clean-flatdir",
     "cap:android": "vite build --mode mobile && npm run mobile:patch-assets && cap sync android && npm run mobile:patch-assets && npm run cap:clean-flatdir && cap open android",
-    "cap:ios": "vite build --mode mobile && npm run mobile:patch-assets && cap sync ios && npm run mobile:patch-assets && cap open ios"
+    "cap:ios": "vite build --mode mobile && npm run mobile:patch-assets && cap sync ios && npm run mobile:patch-assets && cap open ios",
+    "test": "vitest run",
+    "data:subdivisions": "node scripts/generate-subdivisions.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.3",
@@ -34,8 +36,11 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.3",
+    "@testing-library/react": "^16.3.3",
     "@vitejs/plugin-react": "^4.3.1",
     "esbuild": "^0.28.2",
-    "vite": "^7.3.6"
+    "jsdom": "^27.4.0",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.12"
   }
 }

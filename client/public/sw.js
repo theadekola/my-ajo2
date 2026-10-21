@@ -20,7 +20,9 @@ self.addEventListener('push', event => {
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const destination = new URL(event.notification.data?.url || '/notifications', self.location.origin).href;
+  const target = new URL(event.notification.data?.url || '/notifications', self.location.origin);
+  const route = target.origin === self.location.origin ? (target.hash.startsWith('#/') ? target.hash.slice(1) : target.pathname + target.search) : '/notifications';
+  const destination = `${self.location.origin}/#${route.startsWith('/')&&!route.startsWith('//')?route:'/notifications'}`;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
     const existing = clients.find(client => new URL(client.url).origin === self.location.origin);
     if (existing) return existing.focus().then(() => existing.navigate(destination));

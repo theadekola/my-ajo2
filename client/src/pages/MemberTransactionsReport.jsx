@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { exportRows } from '../utils/adminExport.js';
+import { useAuth as useReportAuth } from '../context/AuthContext.jsx';
 import { apiGet } from '../api/appClient.js';
 import SvgIcon from '../components/SvgIcon.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -9,7 +11,7 @@ const fullName=member=>`${member?.FirstName||''} ${member?.LastName||''}`.trim()
 
 export default function MemberTransactionsReport(){
   const {id,memberId}=useParams();
-  const {fmt}=useAuth();
+  const {fmt,user}=useAuth();
   const [member,setMember]=useState(null);
   const [transactions,setTransactions]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -27,8 +29,9 @@ export default function MemberTransactionsReport(){
       .finally(()=>setLoading(false));
   },[id,memberId]);
 
-  const total=useMemo(()=>transactions.reduce((sum,item)=>sum+Number(item.Amount||0),0),[transactions]);
-  const savePdf=()=>window.print();
+  const total=useMemo(()=>transactions.filter(item=>item.Status==='Confirmed').reduce((sum,item)=>sum+Number(item.Amount||0),0),[transactions]);
+  const {showToast}=useReportAuth();
+  const savePdf=async()=>{try{await exportRows(transactions.map(item=>({ID:item.ContributionId,Cycle:item.CycleNumber,Method:formatPaymentMethod(item.Method),Date:String(item.PaidAt||item.CreatedAt).slice(0,10),Status:item.Status,Amount:`${user?.CurrencyCode||'NGN'} ${Number(item.Amount).toLocaleString('en')}`})),`Transactions - ${fullName(member)}`,'pdf');}catch(error){showToast(error.message,'error');}};
 
   return <div className="page-enter transaction-report-page">
     <div className="transaction-report-actions">
@@ -40,7 +43,7 @@ export default function MemberTransactionsReport(){
     {!loading&&!error&&!member&&<div className="card empty-modern">Member not found or no longer available.</div>}
     {member&&<article className="transaction-report-sheet">
       <header><div><h1>Transaction report</h1><p>{fullName(member)}</p></div><div className="transaction-report-brand"><img src="/logo.png" alt=""/><div>My Ajo<span>SMART SAVINGS GROUPS</span></div></div></header>
-      <section className="transaction-report-meta"><div><span>Member</span><strong>{fullName(member)}</strong></div><div><span>Total contributions</span><strong>{fmt(total)}</strong></div><div><span>Records</span><strong>{transactions.length}</strong></div></section>
+      <section className="transaction-report-meta"><div><span>Member</span><strong>{fullName(member)}</strong></div><div><span>Confirmed contributions</span><strong>{fmt(total)}</strong></div><div><span>Records</span><strong>{transactions.length}</strong></div></section>
       <div className="transaction-report-table-wrap"><table><thead><tr><th>ID</th><th>Cycle</th><th>Method</th><th>Date</th><th>Status</th><th>Amount</th></tr></thead><tbody>{transactions.map(item=><tr key={item.ContributionId}><td>{item.ContributionId}</td><td>Cycle {item.CycleNumber}</td><td>{formatPaymentMethod(item.Method)}</td><td>{new Date(item.PaidAt||item.CreatedAt).toLocaleDateString()}</td><td>{item.Status}</td><td>{fmt(item.Amount)}</td></tr>)}{!transactions.length&&<tr><td colSpan="6">No transactions found.</td></tr>}</tbody></table></div>
       <footer>Generated securely by My Ajo on {new Date().toLocaleString()}</footer>
     </article>}

@@ -1,3 +1,4 @@
+import { deliverPushOutbox } from './pushOutbox.js';
 import { getPool, sql } from '../db.js';
 import { encryptValue } from '../utils/fieldCrypto.js';
 import { sendPushToUser } from '../utils/push.js';
@@ -76,13 +77,13 @@ async function cleanupMonthlyNotifications(pool,now){
   if(tomorrow.getUTCDate()!==1||now.getUTCHours()<23) return;
   const month=now.toISOString().slice(0,7);
   if(!await claim(pool,`notification-cleanup:${month}`)) return;
-  await pool.request().query('DELETE FROM Notifications');
+  await pool.request().query('DELETE FROM Notifications WHERE IsRead=1 AND CreatedAt<DATEADD(day,-90,SYSUTCDATETIME())');
 }
 
 export async function runAutomations(){
   if(running) return;
   running=true;
-  try { const pool=await getPool(); const now=new Date(); await sendPaymentReminders(pool,now); await cleanupMonthlyNotifications(pool,now); }
+  try { const pool=await getPool(); const now=new Date(); await deliverPushOutbox(pool); await sendPaymentReminders(pool,now); await cleanupMonthlyNotifications(pool,now); }
   catch(error){ console.error('Scheduled automation failed',error?.message||error); }
   finally { running=false; }
 }

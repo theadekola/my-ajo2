@@ -91,9 +91,9 @@ test('Paystack confirmation decrypts a stored note before re-encrypting it once'
 
 test('payout creation validates group recipient and paid transition is idempotent',()=>{
   const route=fs.readFileSync(new URL('../routes/payouts.js',import.meta.url),'utf8');
-  assert.match(route,/GroupId=@gid AND UserId=@rid AND Status='Approved'/);
+  assert.match(route,/gm.GroupId=@gid AND u.UserId=@rid AND gm.Status='Approved'/);
   assert.match(route,/WHERE PayoutId=@id AND Status='Scheduled'/);
-  assert.match(route,/if\(!updated\.recordset\[0\]\)/);
+  assert.match(route,/if\(!changed\.recordset\[0\]\)/);
 });
 
 test('authenticated requests validate live account state and token version',()=>{
@@ -109,7 +109,7 @@ test('ordinary auth allows a SuperAdmin member session while privileged routes r
   const requireAuthBlock=middleware.slice(middleware.indexOf('export function requireAuth'),middleware.indexOf('export function requireAdmin'));
   const systemAdmin=fs.readFileSync(new URL('../routes/systemAdmin.js',import.meta.url),'utf8');
   assert.doesNotMatch(requireAuthBlock,/MFA_REQUIRED|MFA_ENROLLMENT_REQUIRED/);
-  assert.match(systemAdmin,/r\.use\(requireAuth,requireVerifiedEmail,requireMfa,requireSuperAdmin\)/);
+  assert.match(systemAdmin,/r\.use\(requireAuth,requireVerifiedEmail,requireMfa,requireSystemAccess\)/);
 });
 
 test('SuperAdmin login defers MFA until an explicit administration switch',()=>{
@@ -153,7 +153,7 @@ test('protected SuperAdmin accounts are enforced by database, API, and UI',()=>{
 test('system administration API requires live SuperAdmin and MFA middleware',()=>{
   const route=fs.readFileSync(new URL('../routes/systemAdmin.js',import.meta.url),'utf8');
   const server=fs.readFileSync(new URL('../server.js',import.meta.url),'utf8');
-  assert.match(route,/requireAuth,requireVerifiedEmail,requireMfa,requireSuperAdmin/);
+  assert.match(route,/requireAuth,requireVerifiedEmail,requireMfa,requireSystemAccess/);
   assert.match(route,/Monitoring only/);
   assert.match(route,/Secrets, encryption keys and credentials are never exposed/);
   assert.match(server,/app\.use\('\/api\/system-admin', systemAdminRoutes\)/);
@@ -198,10 +198,10 @@ test('SuperAdmin operational controls are audited and exclude money-management a
 });
 
 test('admin API requests fail visibly instead of loading forever',()=>{
-  const client=fs.readFileSync(new URL('../../client/src/api/appClient.js',import.meta.url),'utf8');
+  const client=fs.readFileSync(new URL('../../client/src/api/appClient.js',import.meta.url),'utf8')+fs.readFileSync(new URL('../../client/src/utils/request.js',import.meta.url),'utf8');
   const detail=fs.readFileSync(new URL('../../client/src/pages/SystemAdminUserDetail.jsx',import.meta.url),'utf8');
   assert.match(client,/server did not respond within 20 seconds/);
-  assert.match(client,/Could not establish request security: server timeout/);
+  assert.match(client,/Could not establish request security:/);
   assert.match(detail,/Retry loading user/);
 });
 

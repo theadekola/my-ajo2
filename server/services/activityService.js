@@ -43,7 +43,11 @@ export function subscribeToActivity(listener) {
 }
 
 export function canReceiveActivity(event, user) {
-  if (user.systemRole === 'Admin') return true;
   if (event.IsAdminOnly) return false;
   return event.IsPublic || Number(event.UserId) === Number(user.userId);
+}
+
+export function redactActivity(event,userId,{anonymous=false,groupAdmin=false}={}){
+  if(!anonymous||groupAdmin||Number(event.UserId)===Number(userId))return event;
+  return {...event,Title:'Group activity',Description:'An anonymous member updated this group.',UserId:null,RelatedEntityId:null,RelatedEntityType:null};
 }

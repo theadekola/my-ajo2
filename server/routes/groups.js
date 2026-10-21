@@ -1,3 +1,6 @@
+import { requireMfa } from '../middleware.js';
+import { withTransaction,fail,positiveInt } from '../utils/operations.js';
+import { validateGroup } from '../utils/operations.js';
 import { Router } from 'express';
 import { getPool, sql } from '../db.js';
 import { requireAuth, requireVerifiedEmail } from '../middleware.js';
@@ -82,6 +85,7 @@ r.get('/:id', async (req,res) => {
 
 r.post('/', requireVerifiedEmail, async (req,res) => {
   try {
+    validateGroup(req.body);
     const { groupName,description,contributionAmount,frequency='Monthly',paymentDayOfWeek,paymentDayOfMonth,maxMembers=10,payoutOrder='Fixed',startDate,icon='home' } = req.body;
     if (!groupName||!contributionAmount) return res.status(400).json({ error:'groupName and contributionAmount required' });
     if (!['Weekly','Monthly'].includes(frequency)) return res.status(400).json({ error:'Frequency must be Weekly or Monthly' });
@@ -117,7 +121,7 @@ r.post('/', requireVerifiedEmail, async (req,res) => {
       if (transaction._aborted !== true) await transaction.rollback().catch(() => {});
       throw error;
     }
-  } catch(e){ console.error(e); res.status(500).json({ error:'Failed to create group' }); }
+  } catch(e){ console.error(e); res.status(e.status||500).json({ error:e.status?e.message:'Failed to create group' }); }
 });
 
 r.put('/:id/privacy', async (req,res) => {
@@ -253,5 +257,23 @@ r.get('/:id/statistics', async (req,res) => {
     contributionStatus: contributionStatus.recordset,
     payoutStatus: payoutStatus.recordset
   });
+});
+r.post('/:id/advance-cycle',requireMfa,async(req,res,next)=>{
+  try{
+    const gid=positiveInt(req.params.id),expected=positiveInt(req.body.currentCycle);if(!gid||!expected)throw fail(400,'A valid group and current cycle are required');
+    const pool=await getPool();const result=await withTransaction(pool,async connection=>{
+      const found=await connection.request().input('gid',sql.Int,gid).input('uid',sql.Int,req.user.userId).query("SELECT g.CurrentCycle,g.Status,g.ContributionAmount FROM AjoGroups g WITH(UPDLOCK,HOLDLOCK) JOIN GroupMembers gm ON gm.GroupId=g.GroupId WHERE g.GroupId=@gid AND gm.UserId=@uid AND gm.Role='Admin' AND gm.Status='Approved'");
+      const group=found.recordset[0];if(!group)throw fail(403,'Group admin only');
+      if(group.Status!=='Active'||Number(group.CurrentCycle)!==expected)throw fail(409,'The cycle changed or this group is not active. Reload first.');
+      const unpaid=await connection.request().input('gid',sql.Int,gid).input('cycle',sql.Int,expected).input('amount',sql.Decimal(18,2),group.ContributionAmount).query(`SELECT gm.UserId FROM GroupMembers gm WHERE gm.GroupId=@gid AND gm.Status='Approved' AND (SELECT ISNULL(SUM(c.Amount),0) FROM Contributions c WHERE c.GroupId=@gid AND c.UserId=gm.UserId AND c.CycleNumber=@cycle AND c.Status='Confirmed')<@amount`);
+      if(unpaid.recordset.length)throw fail(409,'All approved members must have confirmed contributions for this cycle first');
+      const paid=await connection.request().input('gid',sql.Int,gid).input('cycle',sql.Int,expected).query("SELECT RecipientId FROM Payouts WHERE GroupId=@gid AND CycleNumber=@cycle AND Status='Paid'");
+      if(paid.recordset.length!==1)throw fail(409,'Record exactly one paid payout for the current cycle before continuing');
+      const remaining=await connection.request().input('gid',sql.Int,gid).query("SELECT gm.UserId FROM GroupMembers gm WHERE gm.GroupId=@gid AND gm.Status='Approved' AND NOT EXISTS(SELECT 1 FROM Payouts p WHERE p.GroupId=@gid AND p.RecipientId=gm.UserId AND p.Status='Paid')");
+      const completed=!remaining.recordset.length;
+      await connection.request().input('gid',sql.Int,gid).input('cycle',sql.Int,completed?expected:expected+1).input('status',sql.NVarChar,completed?'Completed':'Active').query('UPDATE AjoGroups SET CurrentCycle=@cycle,Status=@status WHERE GroupId=@gid');
+      return {currentCycle:completed?expected:expected+1,completed};
+    });await cacheDeletePattern('dashboard:user:*').catch(()=>{});res.json(result);
+  }catch(error){if(error.status)return res.status(error.status).json({error:error.message});next(error);}
 });
 export default r;

@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
 
 const heroStats = [
-  ['10,000+', 'Savers across Africa'],
-  ['4.9/5', 'Community rating'],
-  ['150+', 'Countries supported'],
+  ['5', 'Supported countries'],
+  ['Web + mobile', 'Access your savings groups'],
+  ['Weekly / monthly', 'Contribution schedules'],
 ];
 
 const steps = [
@@ -102,7 +102,7 @@ export default function Landing() {
               <Link to="/auth" style={{ background: 'var(--gold)', color: 'var(--deep)', padding: '15px 28px', borderRadius: 12, fontWeight: 900, fontSize: 15 }}>
                 Get Started {'->'}
               </Link>
-              <a href="#how-it-works" style={{ background: 'rgba(255,255,255,.10)', color: 'var(--white)', padding: '15px 28px', borderRadius: 12, fontWeight: 800, fontSize: 15, border: '1.5px solid rgba(255,255,255,.20)' }}>
+              <a href="#/" onClick={event=>{event.preventDefault();document.getElementById('how-it-works')?.scrollIntoView({behavior:'smooth'});}} style={{ background: 'rgba(255,255,255,.10)', color: 'var(--white)', padding: '15px 28px', borderRadius: 12, fontWeight: 800, fontSize: 15, border: '1.5px solid rgba(255,255,255,.20)' }}>
                 How It Works
               </a>
             </div>

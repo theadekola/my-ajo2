@@ -1,10 +1,11 @@
+import { useAction } from '../utils/useAction.js';
 import { useEffect, useState } from 'react';
 import SvgIcon from '../components/SvgIcon.jsx';
 import { useParams, Link } from 'react-router-dom';
 import { apiAssetUrl, apiGet, apiPut } from '../api/appClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { formatPaymentMethod } from '../utils/textFormat.js';
-import { fetchPrivateFile, saveBlobToDevice } from '../utils/nativeActions.js';
+import { fetchPrivateFile, saveBlobToDevice, isNativeApp } from '../utils/nativeActions.js';
 
 const evidenceKind = url => {
   const clean = String(url || '').split('?')[0].toLowerCase();
@@ -14,6 +15,7 @@ const evidenceKind = url => {
 };
 
 export default function GroupPayments() {
+  const {run:runAction,busy:actionBusy}=useAction();
   const { id } = useParams();
   const { fmt, showToast } = useAuth();
   const [contribs, setContribs] = useState([]);
@@ -26,12 +28,8 @@ export default function GroupPayments() {
   const load = () => apiGet('/contributions/group/'+id).then(data=>setContribs(Array.isArray(data) ? data : [])).catch(()=>setContribs([]));
   useEffect(() => { load(); }, [id]);
 
-  const confirm = async cid => {
-    await apiPut('/contributions/'+cid+'/confirm',{}); showToast('Contribution confirmed'); load(); setSelected(null);
-  };
-  const reject = async cid => {
-    await apiPut('/contributions/'+cid+'/reject',{}); showToast('Contribution rejected'); load(); setSelected(null);
-  };
+  const confirm = cid => runAction(async()=>{await apiPut('/contributions/'+cid+'/confirm',{});showToast('Contribution confirmed');await load();setSelected(null);});
+  const reject = cid => runAction(async()=>{await apiPut('/contributions/'+cid+'/reject',{});showToast('Contribution rejected');await load();setSelected(null);});
 
   const pending = contribs.filter(c=>c.Status==='Pending');
   const statuses = ['All','Pending','Confirmed','Rejected'];
@@ -152,8 +150,8 @@ export default function GroupPayments() {
             )}
             {selected.Status==='Pending' && (
               <div style={{display:'flex',gap:10,marginTop:16}}>
-                <button className="btn btn-red" onClick={()=>reject(selected.ContributionId)} style={{flex:1,justifyContent:'center'}}><SvgIcon name="x" size={16} /> Reject</button>
-                <button className="btn btn-g" onClick={()=>confirm(selected.ContributionId)} style={{flex:2,justifyContent:'center'}}><SvgIcon name="check" size={16} /> Confirm Contribution</button>
+                <button className="btn btn-red" disabled={actionBusy} onClick={()=>reject(selected.ContributionId)} style={{flex:1,justifyContent:'center'}}><SvgIcon name="x" size={16} /> Reject</button>
+                <button className="btn btn-g" disabled={actionBusy} onClick={()=>confirm(selected.ContributionId)} style={{flex:2,justifyContent:'center'}}><SvgIcon name="check" size={16} /> Confirm Contribution</button>
               </div>
             )}
           </div>
@@ -172,7 +170,7 @@ export default function GroupPayments() {
             <div style={{border:'1px solid rgba(0,0,0,.08)',borderRadius:12,background:'var(--mist)',minHeight:260,maxHeight:'55vh',overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center'}}>
               {evidenceViewer.kind === 'image' ? (
                 <img src={evidenceViewer.previewUrl} alt="Receipt evidence" style={{width:'100%',height:'100%',maxHeight:'55vh',objectFit:'contain',display:'block'}} />
-              ) : evidenceViewer.kind === 'pdf' ? (
+              ) : evidenceViewer.kind === 'pdf' && !isNativeApp() ? (
                 <iframe title="Receipt evidence" src={evidenceViewer.previewUrl} style={{width:'100%',height:'55vh',border:0,background:'var(--white)'}} />
               ) : (
                 <div style={{padding:24,textAlign:'center',color:'var(--muted)',fontSize:13,lineHeight:1.5}}>

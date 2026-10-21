@@ -74,7 +74,7 @@ export default function CreateGroup() {
           )}
           <div className="form-row">
             <div className="fg"><label className="fl">MAX MEMBERS</label><input className="fi" type="number" required min={2} value={form.maxMembers} onChange={e=>setForm(value=>({...value,maxMembers:e.target.value}))}/></div>
-            <div className="fg"><label className="fl">PAYOUT ORDER</label><select className="fs" value={form.payoutOrder} onChange={e=>setForm(value=>({...value,payoutOrder:e.target.value}))}><option>Fixed</option><option>Random</option><option>Bidding</option></select></div>
+            <div className="fg"><label className="fl">PAYOUT ORDER</label><select className="fs" value={form.payoutOrder} onChange={e=>setForm(value=>({...value,payoutOrder:e.target.value}))}><option>Fixed</option></select></div>
           </div>
           <div className="fg"><label className="fl">DESCRIPTION</label><textarea className="fta" value={form.description} onChange={e=>setForm(value=>({...value,description:e.target.value}))} placeholder="What is this group for?"/></div>
           <div className="create-group-page-actions">

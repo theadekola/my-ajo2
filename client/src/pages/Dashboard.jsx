@@ -38,14 +38,14 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       apiGet('/users/dashboard'), apiGet('/groups'), apiGet('/contributions'), apiGet('/payouts'), loadActivity('all'),
-    ]).then(([dashboard, groupData, contributionData, payoutData]) => {
-      setKpi(dashboard || {}); setGroups(Array.isArray(groupData) ? groupData : []);
-      setContributions(Array.isArray(contributionData) ? contributionData : []);
-      setPayouts(Array.isArray(payoutData) ? payoutData : []);
-    }).catch(error => {
-      console.error('Dashboard data could not be loaded', error);
+    ]).then(results => {
+      const [dashboard,groupData,contributionData,payoutData]=results.map(result=>result.status==='fulfilled'?result.value:null);
+      if(dashboard)setKpi(dashboard);
+      if(Array.isArray(groupData))setGroups(groupData);
+      if(Array.isArray(contributionData))setContributions(contributionData);
+      if(Array.isArray(payoutData))setPayouts(payoutData);
     }).finally(() => setLoading(false));
   }, [loadActivity]);
   useEffect(()=>{apiGet('/insights/summary').then(setSummary).catch(()=>{});},[]);
@@ -66,7 +66,7 @@ export default function Dashboard() {
     const date = new Date(item.PaidAt); const now = new Date();
     return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
   });
-  const nextPayout = payouts.filter(item => item.Status === 'Scheduled' && item.ScheduledFor).sort((a,b) => new Date(a.ScheduledFor)-new Date(b.ScheduledFor))[0];
+  const nextPayout = payouts.filter(item => Number(item.RecipientId) === Number(user?.UserId) && item.Status === 'Scheduled' && item.ScheduledFor).sort((a,b) => new Date(a.ScheduledFor)-new Date(b.ScheduledFor))[0];
   const nextPayoutAt = nextPayout?.ScheduledFor || kpi.NextPayoutDate;
   const nextPayoutGroup = nextPayout?.GroupName || kpi.NextPayoutGroup;
   const paidRate = contributions.length ? Math.round(confirmed.length / contributions.length * 100) : 0;
