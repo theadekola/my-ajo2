@@ -1,3 +1,4 @@
+import { sessionUser, pickFields, PROFILE_FIELDS, BANK_FIELDS } from '../utils/userResponses.js';
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
@@ -361,7 +362,7 @@ r.post('/social/onboarding', requirePendingAuth, profileUpload.single('profilePi
     delete user.PasswordHash;
     Object.assign(user, decryptRecord(user, ['Phone','Address','BankName','BankAccountNumber','BankAccountName','BankRoutingCode']));
     setAuthCookie(res, user);
-    res.json({ user });
+    res.json({ user:publicUser(user) });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Could not complete social onboarding' });
@@ -472,7 +473,7 @@ r.post('/register', profileUpload.single('profilePicture'), async (req, res) => 
     } catch(error) { await transaction.rollback().catch(()=>{}); throw error; }
     const user = decryptRecord(r2.recordset[0], ['Phone','Address','BankName','BankAccountNumber','BankAccountName','BankRoutingCode']);
     setAuthCookie(res, user);
-    res.status(201).json({ user });
+    res.status(201).json({ user:publicUser(user) });
   } catch(e){
     console.error('Registration failed', e);
     if (e?.number === 2627 || e?.number === 2601) {
@@ -485,9 +486,7 @@ r.post('/register', profileUpload.single('profilePicture'), async (req, res) => 
   }
 });
 /* POST /api/auth/login */
-function publicUser(user){
-  const safe={...user};for(const key of ['PasswordHash','MfaSecret','MfaPendingSecret','MfaRecoveryCodes'])delete safe[key];return decryptRecord(safe,['Phone','Address','BankName','BankAccountNumber','BankAccountName','BankRoutingCode']);
-}
+function publicUser(user){ return sessionUser(user); }
 
 r.post('/login', async (req, res) => {
   try {
@@ -558,19 +557,31 @@ r.post('/login', async (req, res) => {
     res.json({ user:publicUser(user), recovered: user.AccountDeletionStatus === 'Recovered' });
   } catch(e){ console.error(e); res.status(500).json({ error:'Login failed' }); }
 });
+// Private details are fetched only by their dedicated account screens.
+for (const [path, fields, decryptFields] of [
+  ['/me/profile', PROFILE_FIELDS, ['Phone','Address']],
+  ['/me/bank-details', BANK_FIELDS, BANK_FIELDS],
+]) {
+  r.get(path, requireAuth, async (req,res) => {
+    const pool=await getPool();
+    const result=await pool.request().input('id',sql.Int,req.user.userId)
+      .query(`SELECT ${fields.join(',')} FROM Users WHERE UserId=@id`);
+    if(!result.recordset[0]) return res.status(404).json({error:'Account not found'});
+    res.json(pickFields(decryptRecord(result.recordset[0],decryptFields),fields));
+  });
+}
+
 /* GET /api/auth/me */
 r.get('/me', requirePendingAuth, async (req, res) => {
   const pool = await getPool();
   const r2 = await pool.request().input('id',sql.Int,req.user.userId)
-    .query(`SELECT UserId,FirstName,LastName,Title,Email,Phone,DialCode,ProfilePicture,Sex,Address,
-            Occupation,CountryCode,CurrencyCode,CurrencySymbol,Language,AvatarColor,Bio,DateOfBirth,
-            BankName,BankAccountNumber,BankAccountName,BankRoutingCode,
-            SystemRole,IsProtectedAccount,OrganizerStatus,CanCreateGroups,MfaEnabled,IsEmailVerified,OnboardingDone,
-            NotifPayment,NotifPayout,NotifMember,NotifChat,AdminGroupMembersAnonymous,AccountDeletionStatus,AccountDeletionRequestedAt,AccountDeletionDueAt,ProfileEditedAt,CreatedAt
+    .query(`SELECT UserId,FirstName,LastName,ProfilePicture,AvatarColor,CountryCode,CurrencyCode,CurrencySymbol,
+            Language,SystemRole,IsProtectedAccount,OrganizerStatus,CanCreateGroups,MfaEnabled,IsEmailVerified,OnboardingDone,
+            NotifPayment,NotifPayout,NotifMember,NotifChat,AdminGroupMembersAnonymous
             FROM Users WHERE UserId=@id`);
-  const responseUser=decryptRecord(r2.recordset[0], ['Phone','Address','BankName','BankAccountNumber','BankAccountName','BankRoutingCode']);
-  if(req.user?.mfaVerifiedAt) responseUser.MfaVerifiedAt=req.user.mfaVerifiedAt;
-  res.json(responseUser);
+  if(!r2.recordset[0]) return res.status(404).json({error:'Account not found'});
+  const responseUser=r2.recordset[0];
+  res.json({...publicUser(responseUser), ...(req.user?.mfaVerifiedAt ? {MfaVerifiedAt:req.user.mfaVerifiedAt} : {})});
 });
 
 r.post('/logout', (req, res) => {

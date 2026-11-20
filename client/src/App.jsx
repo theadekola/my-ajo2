@@ -89,7 +89,7 @@ function SuperAdminGuard({children}) {
   const {user,loading}=useAuth();
   if(loading) return <div className="sa-loading">Loading protected administration…</div>;
   if(!user) return <Navigate to="/auth" replace/>;
-  if(!['Admin','SuperAdmin'].includes(user.SystemRole)) return <Navigate to="/dashboard" replace/>;
+  if(!user.Capabilities?.canAccessAdmin) return <Navigate to="/dashboard" replace/>;
   if(!user.MfaVerifiedAt) return <Navigate to="/more" replace/>;
   return children;
 }

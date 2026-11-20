@@ -1,3 +1,4 @@
+import { useAccountDetails } from '../hooks/useAccountDetails.js';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiGet, apiPut } from '../api/appClient.js';
@@ -10,7 +11,9 @@ const EMPTY_BANK_DETAILS = { bankName:'', bankAccountNumber:'', bankAccountName:
 
 export default function GroupBankDetails() {
   const { id } = useParams();
-  const { user, refreshUser, showToast } = useAuth();
+  const { user:sessionUser, refreshUser, showToast } = useAuth();
+  const details=useAccountDetails(sessionUser,'bank-details');
+  const user=details.data ? {...sessionUser,...details.data} : null;
   const [group, setGroup] = useState(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState(EMPTY_BANK_DETAILS);
@@ -30,7 +33,7 @@ export default function GroupBankDetails() {
       bankRoutingCode: user.BankRoutingCode || ''
     };
     setForm(loaded); setEditing(!loaded.bankName);
-  }, [user]);
+  }, [details.data, sessionUser]);
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
@@ -53,6 +56,9 @@ export default function GroupBankDetails() {
       setBusy(false);
     }
   };
+
+  if(details.loading)return <div role="status">Loading account details…</div>;
+  if(details.error)return <div role="alert">{details.error} Please reload this page to try again.</div>;
 
   return (
     <div className="page-enter">

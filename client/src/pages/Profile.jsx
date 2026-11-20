@@ -1,3 +1,4 @@
+import { useAccountDetails } from '../hooks/useAccountDetails.js';
 import { useEffect, useRef, useState } from 'react';
 import SvgIcon from '../components/SvgIcon.jsx';
 import { Link } from 'react-router-dom';
@@ -76,7 +77,9 @@ const buildProfileAddress = form => [
 ].map(value => String(value || '').trim()).filter(Boolean).join(', ');
 
 export default function Profile() {
-  const { user, setUser, refreshUser, showToast, sym } = useAuth();
+  const { user:sessionUser, setUser, refreshUser, showToast, sym } = useAuth();
+  const details=useAccountDetails(sessionUser,'profile');
+  const user=details.data ? {...sessionUser,...details.data} : null;
   const [form, setForm] = useState({});
   const [preview, setPreview] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -110,17 +113,13 @@ export default function Profile() {
       language: user.Language || 'English',
       avatarColor: user.AvatarColor || '#2D5040',
       bio: user.Bio || '',
-      bankName: user.BankName || '',
-      bankAccountNumber: user.BankAccountNumber || '',
-      bankAccountName: user.BankAccountName || '',
-      bankRoutingCode: user.BankRoutingCode || '',
       notifPayment: user.NotifPayment !== 0,
       notifPayout: user.NotifPayout !== 0,
       notifMember: user.NotifMember !== 0,
       notifChat: user.NotifChat !== 0
     });
     }
-  }, [user]);
+  }, [details.data, sessionUser]);
 
   useEffect(() => {
     Promise.all([
@@ -198,10 +197,9 @@ export default function Profile() {
     setMessage('');
     try {
       const normalizedForm = usesPostcode ? { ...form, locality: '' } : { ...form, postcode: '' };
-      const result = await apiPut('/users/me', { ...normalizedForm, address: buildProfileAddress(normalizedForm), countryCode: normalizedForm.countryCode, currencyCode: cc.cur, currencySymbol: cc.sym });
+      await apiPut('/users/me', { ...normalizedForm, address: buildProfileAddress(normalizedForm), countryCode: normalizedForm.countryCode, currencyCode: cc.cur, currencySymbol: cc.sym });
       setForm(normalizedForm);
       await refreshUser();
-      setUser(u => u ? ({ ...u, ProfileEditedAt: result.profileEditedAt || new Date().toISOString() }) : u);
       setEditing(false);
       setMessage('Profile saved. You can edit your profile again in 30 days.');
     } catch (ex) {
@@ -250,6 +248,9 @@ export default function Profile() {
   ];
   const savedForGroup = groupId => confirmed.filter(item=>Number(item.GroupId)===Number(groupId)).reduce((sum,item)=>sum+Number(item.Amount||0),0);
 
+  if(details.loading)return <div role="status">Loading account details…</div>;
+  if(details.error)return <div role="alert">{details.error} Please reload this page to try again.</div>;
+
   return (
     <div className="page-enter">
       <div className="topbar">
@@ -294,7 +295,7 @@ export default function Profile() {
           <div style={{ fontFamily: "'Inter','Poppins',sans-serif", fontSize: 20, fontWeight: 700, color: 'var(--deep)' }}>{user?.FirstName} {user?.LastName}</div>
           <div className="profile-contact"><span><SvgIcon name="mail" size={15}/>{user?.Email}</span><span><SvgIcon name="phone" size={15}/>{form.phone||'No phone number'}</span><span><SvgIcon name="location" size={15}/>{[form.locality,form.state,cc.name].filter(Boolean).join(', ')}</span></div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            <span className="badge b-green">{user?.SystemRole || 'Member'}</span>
+            <span className="badge b-green">{user?.Capabilities?.canAccessAdmin ? 'Administrator' : 'Member'}</span>
             {user?.OrganizerStatus === 'Approved' && <span className="badge b-gold">Approved Organiser</span>}
             <span className="badge b-gold"><SvgIcon name="globe" size={13} /> {user?.CountryCode}</span>
             <span className="badge b-blue" title="Currency">{sym}</span>
