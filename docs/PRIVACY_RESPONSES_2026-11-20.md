@@ -10,6 +10,8 @@ Google Analytics script loading/configuration has been removed. Its script and c
 
 Anything displayed by a browser remains inspectable by the signed-in user. HTTPS protects it in transit, but cannot hide it from that user's developer tools or an attacker who has stolen their session. Account response minimization does not replace session security, MFA and authorization.
 
+Dependency audits also identified vulnerable locked versions. Updated the server dependency lock and Nodemailer within its existing major release, plus the client build-tool lock. Both npm audits reported zero vulnerabilities after those updates.
+
 ## Deployment
 
 Deploy server and rebuilt web client together. Rebuild and distribute native apps using the updated client because the default session API contract changed. Older installed native clients expect profile fields and raw roles in `/auth/me` and need updating. This correction adds no database migration. Preserve existing environment files and user uploads. The older migration 014 is destructive; do not run unrelated pending migrations as part of this privacy-only update.

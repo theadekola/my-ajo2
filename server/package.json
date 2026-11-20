@@ -22,7 +22,7 @@
     "jsonwebtoken": "^9.0.2",
     "mssql": "^12.7.10",
     "multer": "^2.4.0",
-    "nodemailer": "10.0.14",
+    "nodemailer": "10.6.1",
     "qrcode": "^1.5.4",
     "redis": "^5.8.2",
     "web-push": "^3.6.7"
