@@ -28,7 +28,7 @@ export default function Help() {
   const typedNameMatches = expectedFullName && confirmName.trim().toLowerCase() === expectedFullName.toLowerCase();
   const blockingAdminGroups = deleteInfo?.adminGroups || [];
   const memberDeletionGroups = (deleteInfo?.memberships || []).filter(group => group.Role !== 'Admin');
-  const canDeleteAccount = user?.SystemRole !== 'SuperAdmin' && !user?.IsProtectedAccount;
+  const canDeleteAccount = !!user?.Capabilities?.canDeleteAccount;
 
   useEffect(() => {
     if (!showDelete) return;
@@ -103,7 +103,7 @@ export default function Help() {
           <div><div className="card-ttl" style={{ color: 'var(--red)' }}><SvgIcon name="warning" size={18} /> Warning: Danger Zone</div><div className="card-sub">Permanent actions cannot be undone</div></div>
           <button className="btn btn-red btn-sm" onClick={() => { setConfirmName(''); setDeleteError(''); setDeleteInfo(null); setShowDelete(true); }}>Delete Account</button>
         </div>
-      </div> : user?.IsProtectedAccount ? (
+      </div> : !user?.Capabilities?.canDeleteAccount ? (
         <div className="protected-account-notice">
           <strong>Protected SuperAdmin account</strong>
           <p>This platform-owner account cannot be deleted, deactivated or demoted.</p>

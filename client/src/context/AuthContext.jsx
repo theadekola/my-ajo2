@@ -135,7 +135,7 @@ export function AuthProvider({ children }) {
     try { await apiPost('/auth/logout', {}); }
     finally { resetApiSecurity(); setUser(null);setUnread(0); }
   };
-  const isAdmin = ['Admin','SuperAdmin'].includes(user?.SystemRole);
+  const isAdmin = !!user?.Capabilities?.canAccessAdmin;
   const canCreateGroups = user?.OrganizerStatus === 'Approved' && !!user?.CanCreateGroups;
   const sym = currencySymbol(user?.CurrencyCode, user?.CurrencySymbol || '\u20A6');
   const fmt = n => `${sym}${Number(n || 0).toLocaleString()}`;

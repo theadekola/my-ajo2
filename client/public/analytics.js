@@ -1,8 +1,1 @@
-window.dataLayer = window.dataLayer || [];
-
-function gtag() {
-  window.dataLayer.push(arguments);
-}
-
-gtag('js', new Date());
-gtag('config', 'G-6DZJJG75H3');
+// Analytics is disabled in the authenticated application.

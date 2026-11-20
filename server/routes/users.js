@@ -68,7 +68,6 @@ r.put('/me', async (req,res) => {
     const { firstName,lastName,title,phone,sex,dateOfBirth,address,occupation,
             countryCode,currencyCode,currencySymbol,
             language,avatarColor,bio,
-            bankName,bankAccountNumber,bankAccountName,bankRoutingCode,
             notifPayment,notifPayout,notifMember,notifChat } = req.body;
 
     const required = { firstName,lastName,title,phone,sex,address,occupation };
@@ -91,8 +90,6 @@ const pool = await getPool();
       .input('la',sql.NVarChar,language||'English')
       .input('av',sql.NVarChar,avatarColor||'#2D5040').input('bi',sql.NVarChar,bio||null)
       .input('db',sql.Date,dateOfBirth || null)
-      .input('bn',sql.NVarChar,encryptValue(bankName)).input('ba',sql.NVarChar,encryptValue(bankAccountNumber))
-      .input('bna',sql.NVarChar,encryptValue(bankAccountName)).input('br',sql.NVarChar,encryptValue(bankRoutingCode))
       .input('np',sql.Bit,notifPayment!==undefined?notifPayment:1)
       .input('no',sql.Bit,notifPayout!==undefined?notifPayout:1)
       .input('nm',sql.Bit,notifMember!==undefined?notifMember:1)
@@ -100,7 +97,6 @@ const pool = await getPool();
       .query(`UPDATE Users SET FirstName=@fn,LastName=@ln,Title=@ti,Phone=@ph,Sex=@sx,
               Address=@ad,Occupation=@oc,CountryCode=@cc,CurrencyCode=@cu,CurrencySymbol=@cs,
               Language=@la,AvatarColor=@av,Bio=@bi,DateOfBirth=@db,
-              BankName=@bn,BankAccountNumber=@ba,BankAccountName=@bna,BankRoutingCode=@br,
               NotifPayment=@np,NotifPayout=@no,NotifMember=@nm,NotifChat=@nc,
               ProfileEditedAt=SYSUTCDATETIME(),UpdatedAt=SYSUTCDATETIME()
               OUTPUT INSERTED.ProfileEditedAt

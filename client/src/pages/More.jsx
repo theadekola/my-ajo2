@@ -68,9 +68,9 @@ export default function More() {
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: "'Inter','Poppins',sans-serif", fontSize: 17, fontWeight: 800, color: 'var(--deep)' }}>{user?.FirstName} {user?.LastName}</div>
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{user?.Email} - {user?.SystemRole}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{(user?.Capabilities?.canAccessAdmin ? 'Administrator' : 'Member')}</div>
         </div>
-        {['Admin','SuperAdmin'].includes(user?.SystemRole) && (
+        {!!user?.Capabilities?.canAccessAdmin && (
           <button type="button" className="btn btn-g sa-switch" onClick={beginSuperAdminSwitch} disabled={mfaBusy}>
             <SvgIcon name="shield" size={16}/> {mfaBusy ? 'Preparing...' : 'Administration'}
           </button>

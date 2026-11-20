@@ -263,7 +263,7 @@ export default function Layout() {
             </div>
             <div className="sb-user-copy">
               <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--white)' }}>{user?.FirstName} {user?.LastName}</div>
-              <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.4)' }}>{user?.SystemRole}</div>
+              <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.4)' }}>{(user?.Capabilities?.canAccessAdmin ? 'Administrator' : 'Member')}</div>
             </div>
           </button>
         </div>

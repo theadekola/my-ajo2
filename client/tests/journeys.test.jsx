@@ -8,12 +8,14 @@ vi.mock('../src/context/AuthContext.jsx',async original=>({...await original(),u
 import App from '../src/App.jsx';
 import MakePayment from '../src/pages/MakePayment.jsx';
 import GroupPayments from '../src/pages/GroupPayments.jsx';
-const user={UserId:3,FirstName:'Test',LastName:'Admin',Title:'Mr',Email:'test@example.invalid',CountryCode:'NG',CurrencyCode:'NGN',SystemRole:'SuperAdmin',MfaEnabled:1,MfaVerifiedAt:'2026-10-21T00:00:00Z',IsActive:1,IsEmailVerified:1,OnboardingDone:1,BankName:'Test bank',BankAccountNumber:'1234567890',BankAccountName:'Test Admin',CreatedAt:'2026-01-01'};
+const user={UserId:3,FirstName:'Test',LastName:'Admin',Title:'Mr',Email:'test@example.invalid',CountryCode:'NG',CurrencyCode:'NGN',SystemRole:'SuperAdmin',Capabilities:{canAccessAdmin:true,canDeleteAccount:false},MfaEnabled:1,MfaVerifiedAt:'2026-10-21T00:00:00Z',IsActive:1,IsEmailVerified:1,OnboardingDone:1,BankName:'Test bank',BankAccountNumber:'1234567890',BankAccountName:'Test Admin',CreatedAt:'2026-01-01'};
 const members=[{...user,MemberId:1,Role:'Admin',Status:'Approved',SlotNumber:1},{...user,UserId:7,MemberId:2,FirstName:'Other',LastName:'Member',Role:'Member',Status:'Approved',SlotNumber:2}];
 const group={GroupId:2,GroupName:'Audit circle',AdminUserId:3,CountryCode:'NG',CurrencyCode:'NGN',ContributionAmount:100,Frequency:'Monthly',CurrentCycle:1,MemberCount:2,MaxMembers:2,PaidCount:0,CollectedThisCycle:0,Role:'Admin',Status:'Active',members};
 const contributions=[{ContributionId:1,UserId:7,GroupId:2,MemberName:'Other Member',Amount:100,Status:'Pending',CycleNumber:1,Method:'BankTransfer',PaidAt:'2026-10-20'}];
 function data(path){
  const p=path.split('?')[0];
+ if(p==='/auth/me/profile')return {Email:'private@example.invalid',Phone:'12345678',Occupation:'Teacher'};
+ if(p==='/auth/me/bank-details')return {BankName:'Private bank',BankAccountNumber:'9876543210',BankAccountName:'Test Admin'};
  if(p==='/users/dashboard')return {ActiveGroups:1};if(p==='/groups')return [group];if(p==='/groups/2')return group;if(p==='/members/2')return members;
  if(p.startsWith('/contributions'))return contributions;
  if(p==='/payouts/member/2')return {payouts:[],groupName:'Audit circle'};if(p.startsWith('/payouts'))return [];
@@ -58,4 +60,26 @@ it('a failed contribution approval remains open and shows the error',async()=>{
 it('group summary shows zero collected rather than the expected pot',async()=>{
  render(<MemoryRouter initialEntries={['/group/2']}><App/></MemoryRouter>);await screen.findByText('COLLECTED');
  const card=screen.getByText('COLLECTED').parentElement;expect(card.textContent).toContain('₦0');
+});
+
+it('profile loads private details separately without adding them to session state',async()=>{
+ mocks.user={UserId:3,FirstName:'Test',LastName:'Admin',CountryCode:'NG',Capabilities:{canAccessAdmin:false,canDeleteAccount:true}};
+ render(<MemoryRouter initialEntries={['/profile']}><App/></MemoryRouter>);
+ await screen.findByText('private@example.invalid');
+ expect(mocks.get).toHaveBeenCalledWith('/auth/me/profile');
+ expect(mocks.user.Email).toBeUndefined();
+ expect(mocks.get).not.toHaveBeenCalledWith('/auth/me/bank-details');
+});
+it('failed private detail loading blocks editing an empty profile',async()=>{
+ mocks.get.mockImplementation(async p=>{if(p==='/auth/me/profile')throw new Error('Profile unavailable');return data(p);});
+ render(<MemoryRouter initialEntries={['/profile']}><App/></MemoryRouter>);
+ await screen.findByRole('alert');
+ expect(document.body.textContent).toContain('Profile unavailable');
+ expect(screen.queryByRole('button',{name:/Save Profile/i})).toBeNull();
+});
+it('bank form loads account numbers only from its own endpoint',async()=>{
+ render(<MemoryRouter initialEntries={['/group/2/bank']}><App/></MemoryRouter>);
+ await screen.findByDisplayValue('9876543210');
+ expect(mocks.get).toHaveBeenCalledWith('/auth/me/bank-details');
+ expect(mocks.get).not.toHaveBeenCalledWith('/auth/me/profile');
 });
